@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
+import { useAuthStore } from '../../store/authStore'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -27,6 +28,9 @@ interface SidebarProps {
 }
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  const { user } = useAuthStore()
+  const logoUrl: string | null = user?.user_metadata?.logo_url ?? null
+
   return (
     <aside
       className="fixed top-0 left-0 h-screen bg-[#111113] border-r border-[rgba(255,255,255,0.07)] flex flex-col z-40 transition-all duration-300"
@@ -34,8 +38,12 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     >
       {/* Logo */}
       <div className="px-3 pt-4 pb-3 border-b border-[rgba(255,255,255,0.07)] flex items-center gap-2.5 min-h-[56px]">
-        <div className="w-8 h-8 rounded-[8px] bg-[#22c55e] flex items-center justify-center shrink-0">
-          <Zap size={16} className="text-[#09090b]" fill="currentColor" />
+        <div className="w-8 h-8 rounded-[8px] bg-[#22c55e] flex items-center justify-center shrink-0 overflow-hidden">
+          {logoUrl ? (
+            <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-0.5" />
+          ) : (
+            <Zap size={16} className="text-[#09090b]" fill="currentColor" />
+          )}
         </div>
 
         {!collapsed && (
