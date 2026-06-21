@@ -65,3 +65,8 @@ export async function toggleEtapa(id: number, status: StatusEtapaProjeto) {
   const { error } = await supabase.from('etapas_projeto').update({ status }).eq('id', id)
   if (error) throw error
 }
+
+export async function deleteProjeto(id: number) {
+  const { error } = await supabase.from('projetos').delete().eq('id', id)
+  if (error) throw error
+}

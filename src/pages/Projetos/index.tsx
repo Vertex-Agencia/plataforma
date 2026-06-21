@@ -1,9 +1,9 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Plus, CheckSquare, Square, ArrowLeft, GripVertical, CalendarClock, Layers } from 'lucide-react'
+import { Plus, CheckSquare, Square, ArrowLeft, GripVertical, CalendarClock, Layers, Trash2 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
-import { getProjetos, createProjeto, createEtapa, toggleEtapa, getProjetoById, updateProjetoStatus } from '../../services/projetos'
+import { getProjetos, createProjeto, createEtapa, toggleEtapa, getProjetoById, updateProjetoStatus, deleteProjeto } from '../../services/projetos'
 import type { ProjetoComRelacoes } from '../../services/projetos'
 import { getClientes } from '../../services/clientes'
 import { Card } from '../../components/ui/Card'
@@ -311,6 +311,7 @@ export function ProjetoPerfil() {
   const queryClient = useQueryClient()
   const projetoId = Number(id)
   const [novaEtapa, setNovaEtapa] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const { data: projeto, isLoading, isError } = useQuery<ProjetoComRelacoes>({
     queryKey: ['projeto', user?.id, projetoId],
@@ -333,6 +334,14 @@ export function ProjetoPerfil() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projeto', user?.id, projetoId] })
       queryClient.invalidateQueries({ queryKey: ['projetos', user?.id] })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteProjeto(projetoId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projetos', user?.id] })
+      navigate('/projetos')
     },
   })
 
@@ -371,22 +380,31 @@ export function ProjetoPerfil() {
             <h2 className="text-lg font-semibold text-[#fafafa]">{projeto.nome}</h2>
             <p className="text-sm text-[#a1a1aa] mt-0.5">{projeto.clientes?.nome_razao_social ?? '—'}</p>
           </div>
-          {/* Status selector inline */}
-          <div className="flex gap-1 bg-[#111113] border border-[rgba(255,255,255,0.07)] rounded-[10px] p-1 flex-wrap">
-            {STATUS_COLUMNS.map((s) => (
-              <button
-                key={s}
-                onClick={() => projeto.status !== s && statusMutation.mutate(s)}
-                disabled={statusMutation.isPending}
-                className={`px-3 py-1.5 rounded-[8px] text-xs font-medium transition-colors ${
-                  projeto.status === s
-                    ? 'bg-[#18181b] text-[#fafafa]'
-                    : 'text-[#a1a1aa] hover:text-[#fafafa]'
-                }`}
-              >
-                {statusLabel[s]}
-              </button>
-            ))}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Status selector inline */}
+            <div className="flex gap-1 bg-[#111113] border border-[rgba(255,255,255,0.07)] rounded-[10px] p-1 flex-wrap">
+              {STATUS_COLUMNS.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => projeto.status !== s && statusMutation.mutate(s)}
+                  disabled={statusMutation.isPending}
+                  className={`px-3 py-1.5 rounded-[8px] text-xs font-medium transition-colors ${
+                    projeto.status === s
+                      ? 'bg-[#18181b] text-[#fafafa]'
+                      : 'text-[#a1a1aa] hover:text-[#fafafa]'
+                  }`}
+                >
+                  {statusLabel[s]}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="p-2 rounded-[8px] text-[#71717a] hover:text-[#ef4444] hover:bg-[#ef44441a] transition-colors"
+              title="Excluir projeto"
+            >
+              <Trash2 size={16} />
+            </button>
           </div>
         </div>
         {projeto.observacoes && <p className="text-sm text-[#a1a1aa] mt-3">{projeto.observacoes}</p>}
@@ -399,6 +417,20 @@ export function ProjetoPerfil() {
           </div>
         </div>
       </Card>
+
+      <Modal
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Excluir projeto"
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmDelete(false)}>Cancelar</Button>
+            <Button variant="danger" loading={deleteMutation.isPending} onClick={() => deleteMutation.mutate()}>Excluir</Button>
+          </>
+        }
+      >
+        <p className="text-sm text-[#a1a1aa]">Tem certeza que deseja excluir o projeto <span className="text-[#fafafa] font-medium">{projeto.nome}</span>? Todas as etapas serão removidas permanentemente.</p>
+      </Modal>
 
       <Card className="p-5">
         <p className="text-sm font-semibold text-[#fafafa] mb-4">Etapas</p>
