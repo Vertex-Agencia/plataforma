@@ -38,13 +38,18 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     >
       {/* Logo */}
       <div className="px-3 pt-4 pb-3 border-b border-[rgba(255,255,255,0.07)] flex items-center gap-2.5 min-h-[56px]">
-        <div className="w-8 h-8 rounded-[8px] bg-[#22c55e] flex items-center justify-center shrink-0 overflow-hidden">
-          {logoUrl ? (
-            <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-0.5" />
-          ) : (
+        {logoUrl ? (
+          <img
+            src={logoUrl}
+            alt="Logo"
+            className="shrink-0 object-contain rounded-[6px]"
+            style={{ width: collapsed ? '32px' : '40px', height: collapsed ? '32px' : '40px' }}
+          />
+        ) : (
+          <div className="w-8 h-8 rounded-[8px] bg-[#22c55e] flex items-center justify-center shrink-0">
             <Zap size={16} className="text-[#09090b]" fill="currentColor" />
-          )}
-        </div>
+          </div>
+        )}
 
         {!collapsed && (
           <>
