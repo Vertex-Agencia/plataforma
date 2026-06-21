@@ -29,9 +29,9 @@ export function Th({ children, className = '' }: { children: ReactNode; classNam
   )
 }
 
-export function Td({ children, className = '' }: { children: ReactNode; className?: string }) {
+export function Td({ children, className = '', onClick }: { children: ReactNode; className?: string; onClick?: (e: React.MouseEvent) => void }) {
   return (
-    <td className={`px-4 py-3 text-sm text-[#fafafa] ${className}`}>{children}</td>
+    <td onClick={onClick} className={`px-4 py-3 text-sm text-[#fafafa] ${className}`}>{children}</td>
   )
 }
 

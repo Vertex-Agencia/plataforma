@@ -8,7 +8,7 @@ import type { ProjetoComRelacoes } from '../../services/projetos'
 import { getClientes } from '../../services/clientes'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
-import { Badge } from '../../components/ui/Badge'
+
 import { Modal } from '../../components/ui/Modal'
 import { Input, Textarea, Select } from '../../components/ui/Input'
 import { PageSpinner } from '../../components/ui/Spinner'
@@ -24,9 +24,6 @@ const statusLabel: Record<StatusProjeto, string> = {
   pausado: 'Pausado',
 }
 
-const statusVariant: Record<StatusProjeto, 'gray' | 'blue' | 'green' | 'amber'> = {
-  nao_iniciado: 'gray', em_andamento: 'blue', concluido: 'green', pausado: 'amber',
-}
 
 const tipoLabel: Record<TipoProjeto, string> = {
   website: 'Website', aplicativo: 'Aplicativo', ecommerce: 'E-commerce',

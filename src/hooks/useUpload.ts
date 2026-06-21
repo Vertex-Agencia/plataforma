@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { supabase } from '../lib/supabase'
 
 const ALLOWED_TYPES = [
   'application/pdf',
