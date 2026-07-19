@@ -25,6 +25,16 @@ export async function createEntrada(entrada: EntradaInput) {
   if (error) throw error
 }
 
+export async function updateEntrada(id: number, updates: Partial<EntradaInput>) {
+  const { error } = await supabase.from('entradas_saidas').update(updates).eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteEntrada(id: number) {
+  const { error } = await supabase.from('entradas_saidas').delete().eq('id', id)
+  if (error) throw error
+}
+
 export async function getDespesasRecorrentes(userId: string): Promise<DespesaRecorrente[]> {
   const { data, error } = await supabase
     .from('despesas_recorrentes')
@@ -51,6 +61,11 @@ export async function createDespesaRecorrente(despesa: DespesaInput) {
 
 export async function toggleDespesaAtivo(id: number, ativo: boolean) {
   const { error } = await supabase.from('despesas_recorrentes').update({ ativo }).eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteDespesaRecorrente(id: number) {
+  const { error } = await supabase.from('despesas_recorrentes').delete().eq('id', id)
   if (error) throw error
 }
 

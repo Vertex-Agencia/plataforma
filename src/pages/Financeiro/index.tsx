@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, TrendingUp, TrendingDown, ToggleLeft, ToggleRight, Users } from 'lucide-react'
+import { Plus, TrendingUp, TrendingDown, ToggleLeft, ToggleRight, Users, Pencil, Trash2, RotateCcw } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { supabase } from '../../lib/supabase'
 import {
-  getEntradas, createEntrada,
-  getDespesasRecorrentes, createDespesaRecorrente, toggleDespesaAtivo,
+  getEntradas, createEntrada, updateEntrada, deleteEntrada,
+  getDespesasRecorrentes, createDespesaRecorrente, toggleDespesaAtivo, deleteDespesaRecorrente,
   getParcelasPagas,
 } from '../../services/financeiro'
+import { reverterParcelaPendente } from '../../services/clientes'
 import type { ParcelaPaga } from '../../services/financeiro'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -30,6 +31,11 @@ export function Financeiro() {
   const [modalOpen, setModalOpen] = useState(false)
   const [despesaModalOpen, setDespesaModalOpen] = useState(false)
   const [filtro, setFiltro] = useState<FiltroLancamento>('all')
+
+  const [editandoEntrada, setEditandoEntrada] = useState<EntradaSaida | null>(null)
+  const [excluindoEntradaId, setExcluindoEntradaId] = useState<number | null>(null)
+  const [revertendoParcelaId, setRevertendoParcelaId] = useState<number | null>(null)
+  const [excluindoDespesaId, setExcluindoDespesaId] = useState<number | null>(null)
 
   const { data: entradas, isLoading: loadingEntradas } = useQuery<EntradaSaida[]>({
     queryKey: ['entradas', user?.id],
@@ -55,6 +61,7 @@ export function Financeiro() {
       queryClient.invalidateQueries({ queryKey: ['entradas', user!.id] })
       queryClient.invalidateQueries({ queryKey: ['parcelas-pagas', user!.id] })
       queryClient.invalidateQueries({ queryKey: ['despesas-recorrentes', user!.id] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-metrics', user!.id] })
     }
     const channel = supabase
       .channel('financeiro-realtime')
@@ -70,12 +77,37 @@ export function Financeiro() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['despesas-recorrentes', user?.id] }),
   })
 
+  const deleteEntradaMutation = useMutation({
+    mutationFn: (id: number) => deleteEntrada(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['entradas', user?.id] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-metrics', user?.id] })
+      setExcluindoEntradaId(null)
+    },
+  })
+
+  const reverterMutation = useMutation({
+    mutationFn: (id: number) => reverterParcelaPendente(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parcelas-pagas', user?.id] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-metrics', user?.id] })
+      setRevertendoParcelaId(null)
+    },
+  })
+
+  const deleteDespesaMutation = useMutation({
+    mutationFn: (id: number) => deleteDespesaRecorrente(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['despesas-recorrentes', user?.id] })
+      setExcluindoDespesaId(null)
+    },
+  })
+
   const receitaManual = (entradas ?? []).filter((e) => e.tipo === 'entrada').reduce((s, e) => s + Number(e.valor), 0)
   const receitaParcelas = (parcelasPagas ?? []).reduce((s, p) => s + p.valor_parcela, 0)
   const receita = receitaManual + receitaParcelas
   const despesasTotal = (entradas ?? []).filter((e) => e.tipo === 'saida').reduce((s, e) => s + Number(e.valor), 0)
 
-  // Unified list sorted by date
   type ItemUnificado =
     | { kind: 'entrada'; data: EntradaSaida }
     | { kind: 'parcela'; data: ParcelaPaga }
@@ -162,7 +194,7 @@ export function Financeiro() {
           ) : (
             <Table>
               <Thead>
-                <tr><Th>Descrição</Th><Th>Tipo</Th><Th>Data</Th><Th>NF</Th><Th>Valor</Th></tr>
+                <tr><Th>Descrição</Th><Th>Tipo</Th><Th>Data</Th><Th>NF</Th><Th>Valor</Th><Th>{''}</Th></tr>
               </Thead>
               <Tbody>
                 {filtered.map((item, i) => {
@@ -188,6 +220,15 @@ export function Financeiro() {
                         <Td>{formatDate(p.data_pagamento)}</Td>
                         <Td><Badge variant="gray">—</Badge></Td>
                         <Td className="font-medium text-[#22c55e]">+{formatCurrency(p.valor_parcela)}</Td>
+                        <Td>
+                          <button
+                            title="Reverter para pendente"
+                            onClick={() => setRevertendoParcelaId(p.id)}
+                            className="p-1.5 rounded-[6px] text-[#52525b] hover:text-[#f59e0b] hover:bg-[#f59e0b1a] transition-colors"
+                          >
+                            <RotateCcw size={14} />
+                          </button>
+                        </Td>
                       </Tr>
                     )
                   }
@@ -206,6 +247,24 @@ export function Financeiro() {
                       <Td>{e.emitido_nota_fiscal ? <Badge variant="green">Sim</Badge> : <Badge variant="gray">Não</Badge>}</Td>
                       <Td className={`font-medium ${e.tipo === 'entrada' ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
                         {e.tipo === 'entrada' ? '+' : '-'}{formatCurrency(Number(e.valor))}
+                      </Td>
+                      <Td>
+                        <div className="flex items-center gap-1">
+                          <button
+                            title="Editar"
+                            onClick={() => setEditandoEntrada(e)}
+                            className="p-1.5 rounded-[6px] text-[#52525b] hover:text-[#a1a1aa] hover:bg-[#27272a] transition-colors"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            title="Excluir"
+                            onClick={() => setExcluindoEntradaId(e.id)}
+                            className="p-1.5 rounded-[6px] text-[#52525b] hover:text-[#ef4444] hover:bg-[#ef44441a] transition-colors"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </Td>
                     </Tr>
                   )
@@ -232,9 +291,18 @@ export function Financeiro() {
                     <Td>{formatDate(d.data_inicio)}</Td>
                     <Td><Badge variant={d.ativo ? 'green' : 'gray'}>{d.ativo ? 'Ativa' : 'Pausada'}</Badge></Td>
                     <Td>
-                      <button onClick={() => toggleMutation.mutate({ id: d.id, ativo: !d.ativo })} className="text-[#a1a1aa] hover:text-[#fafafa] transition-colors">
-                        {d.ativo ? <ToggleRight size={20} className="text-[#22c55e]" /> : <ToggleLeft size={20} />}
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => toggleMutation.mutate({ id: d.id, ativo: !d.ativo })} className="p-1.5 text-[#a1a1aa] hover:text-[#fafafa] transition-colors" title={d.ativo ? 'Pausar' : 'Ativar'}>
+                          {d.ativo ? <ToggleRight size={20} className="text-[#22c55e]" /> : <ToggleLeft size={20} />}
+                        </button>
+                        <button
+                          title="Excluir"
+                          onClick={() => setExcluindoDespesaId(d.id)}
+                          className="p-1.5 rounded-[6px] text-[#52525b] hover:text-[#ef4444] hover:bg-[#ef44441a] transition-colors"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </Td>
                   </Tr>
                 ))}
@@ -246,6 +314,63 @@ export function Financeiro() {
 
       <LancamentoModal open={modalOpen} onClose={() => setModalOpen(false)} userId={user!.id} />
       <DespesaModal open={despesaModalOpen} onClose={() => setDespesaModalOpen(false)} userId={user!.id} />
+
+      {editandoEntrada && (
+        <EditLancamentoModal entrada={editandoEntrada} onClose={() => setEditandoEntrada(null)} />
+      )}
+
+      {/* Confirmação: excluir lançamento manual */}
+      <Modal
+        open={excluindoEntradaId !== null}
+        onClose={() => setExcluindoEntradaId(null)}
+        title="Excluir lançamento"
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => setExcluindoEntradaId(null)}>Cancelar</Button>
+            <Button variant="danger" loading={deleteEntradaMutation.isPending} onClick={() => deleteEntradaMutation.mutate(excluindoEntradaId!)}>
+              Excluir
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-[#a1a1aa]">Tem certeza que deseja excluir este lançamento? Esta ação não pode ser desfeita.</p>
+      </Modal>
+
+      {/* Confirmação: reverter parcela */}
+      <Modal
+        open={revertendoParcelaId !== null}
+        onClose={() => setRevertendoParcelaId(null)}
+        title="Reverter pagamento"
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => setRevertendoParcelaId(null)}>Cancelar</Button>
+            <Button variant="danger" loading={reverterMutation.isPending} onClick={() => reverterMutation.mutate(revertendoParcelaId!)}>
+              Reverter para pendente
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-[#a1a1aa]">
+          Tem certeza que deseja reverter esta parcela para <span className="text-[#fafafa] font-medium">pendente</span>? Ela será removida do financeiro.
+        </p>
+      </Modal>
+
+      {/* Confirmação: excluir despesa recorrente */}
+      <Modal
+        open={excluindoDespesaId !== null}
+        onClose={() => setExcluindoDespesaId(null)}
+        title="Excluir despesa recorrente"
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => setExcluindoDespesaId(null)}>Cancelar</Button>
+            <Button variant="danger" loading={deleteDespesaMutation.isPending} onClick={() => deleteDespesaMutation.mutate(excluindoDespesaId!)}>
+              Excluir
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-[#a1a1aa]">Tem certeza que deseja excluir esta despesa recorrente? Esta ação não pode ser desfeita.</p>
+      </Modal>
     </div>
   )
 }
@@ -258,12 +383,58 @@ function LancamentoModal({ open, onClose, userId }: { open: boolean; onClose: ()
     mutationFn: () => createEntrada({ user_id: userId, descricao: form.descricao, valor: Number(form.valor), tipo: form.tipo, data_transacao: form.data_transacao, emitido_nota_fiscal: form.emitido_nota_fiscal, cliente_id: null }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['entradas', user?.id] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-metrics', user?.id] })
       onClose()
     },
   })
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm((f) => ({ ...f, [k]: e.target.value }))
   return (
     <Modal open={open} onClose={onClose} title="Novo Lançamento"
+      actions={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="accent" loading={mutation.isPending} onClick={() => mutation.mutate()}>Salvar</Button></>}>
+      <div className="flex flex-col gap-4">
+        <Input label="Descrição *" value={form.descricao} onChange={set('descricao')} required />
+        <Input label="Valor (R$) *" type="number" step="0.01" min="0" value={form.valor} onChange={set('valor')} required />
+        <Select label="Tipo *" value={form.tipo} onChange={(e) => setForm((f) => ({ ...f, tipo: e.target.value as TipoTransacao }))}>
+          <option value="entrada">Entrada</option>
+          <option value="saida">Saída</option>
+        </Select>
+        <Input label="Data *" type="date" value={form.data_transacao} onChange={set('data_transacao')} />
+        <label className="flex items-center gap-2 text-sm text-[#a1a1aa] cursor-pointer">
+          <input type="checkbox" checked={form.emitido_nota_fiscal} onChange={(e) => setForm((f) => ({ ...f, emitido_nota_fiscal: e.target.checked }))} className="rounded" />
+          Nota fiscal emitida
+        </label>
+      </div>
+    </Modal>
+  )
+}
+
+function EditLancamentoModal({ entrada, onClose }: { entrada: EntradaSaida; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const { user } = useAuthStore()
+  const [form, setForm] = useState({
+    descricao: entrada.descricao,
+    valor: String(entrada.valor),
+    tipo: entrada.tipo,
+    data_transacao: entrada.data_transacao,
+    emitido_nota_fiscal: entrada.emitido_nota_fiscal ?? false,
+  })
+  const mutation = useMutation({
+    mutationFn: () => updateEntrada(entrada.id, {
+      descricao: form.descricao,
+      valor: Number(form.valor),
+      tipo: form.tipo as TipoTransacao,
+      data_transacao: form.data_transacao,
+      emitido_nota_fiscal: form.emitido_nota_fiscal,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['entradas', user?.id] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-metrics', user?.id] })
+      onClose()
+    },
+  })
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  return (
+    <Modal open onClose={onClose} title="Editar Lançamento"
       actions={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="accent" loading={mutation.isPending} onClick={() => mutation.mutate()}>Salvar</Button></>}>
       <div className="flex flex-col gap-4">
         <Input label="Descrição *" value={form.descricao} onChange={set('descricao')} required />

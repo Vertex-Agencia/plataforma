@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   PieChart, Pie, Cell, Legend,
 } from 'recharts'
-import { TrendingUp, Users, Clock, AlertTriangle } from 'lucide-react'
+import { TrendingUp, Users, Clock, AlertTriangle, CheckCircle } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { getDashboardMetrics, getChartData } from '../../services/dashboard'
+import { marcarParcelaPaga } from '../../services/clientes'
 import { supabase } from '../../lib/supabase'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
@@ -58,6 +59,20 @@ export function Dashboard() {
   const { user } = useAuthStore()
   const queryClient = useQueryClient()
   const [period, setPeriod] = useState<Period>('1m')
+  const [pagandoId, setPagandoId] = useState<number | null>(null)
+
+  const pagarParcelaMutation = useMutation({
+    mutationFn: (parcelaId: number) => {
+      setPagandoId(parcelaId)
+      return marcarParcelaPaga(parcelaId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard-metrics', user?.id] })
+      queryClient.invalidateQueries({ queryKey: ['parcelas-pagas', user?.id] })
+      setPagandoId(null)
+    },
+    onError: () => setPagandoId(null),
+  })
 
   const { start, end } = getPeriodDates(period)
 
@@ -217,6 +232,14 @@ export function Dashboard() {
                       <p className="text-sm font-medium text-[#fafafa]">{formatCurrency(Number(p.valor_parcela))}</p>
                       <Badge variant={atrasado ? 'red' : 'amber'}>{atrasado ? 'Atrasado' : 'Pendente'}</Badge>
                     </div>
+                    <button
+                      title="Marcar como pago"
+                      disabled={pagarParcelaMutation.isPending && pagandoId === p.id}
+                      onClick={() => pagarParcelaMutation.mutate(p.id)}
+                      className="p-1.5 rounded-[6px] text-[#52525b] hover:text-[#22c55e] hover:bg-[#22c55e1a] transition-colors shrink-0 disabled:opacity-40"
+                    >
+                      <CheckCircle size={16} />
+                    </button>
                   </div>
                 )
               })}
