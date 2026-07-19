@@ -18,11 +18,14 @@ export async function getDashboardMetrics(userId: string, startDate?: string, en
   const start = startDate ?? new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
   const end = endDate ?? new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
 
+  const proximoMesInicio = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString().split('T')[0]
+  const proximoMesFim = new Date(now.getFullYear(), now.getMonth() + 2, 0).toISOString().split('T')[0]
+
   const [parcelasRes, despesasRes, clientesRes, pendentesRes, manutencaoRes] = await Promise.all([
     supabase.from('parcelas').select('valor_parcela, data_pagamento, origem').eq('user_id', userId).eq('status', 'pago').gte('data_pagamento', start).lte('data_pagamento', end + 'T23:59:59'),
     supabase.from('entradas_saidas').select('valor').eq('user_id', userId).eq('tipo', 'saida').gte('data_transacao', start).lte('data_transacao', end),
     supabase.from('clientes').select('id').eq('user_id', userId).eq('status', 'ativo'),
-    supabase.from('parcelas').select('id, numero_parcela, total_parcelas, valor_parcela, data_vencimento, status, clientes(nome_razao_social)').eq('user_id', userId).eq('status', 'pendente').order('data_vencimento', { ascending: true }).limit(10),
+    supabase.from('parcelas').select('id, numero_parcela, total_parcelas, valor_parcela, data_vencimento, status, clientes(nome_razao_social)').eq('user_id', userId).eq('status', 'pendente').gte('data_vencimento', proximoMesInicio).lte('data_vencimento', proximoMesFim).order('data_vencimento', { ascending: true }),
     supabase.from('manutencao_recorrente').select('id, data_vencimento_atual, clientes(nome_razao_social)').eq('user_id', userId).eq('status', 'ativo'),
   ])
 

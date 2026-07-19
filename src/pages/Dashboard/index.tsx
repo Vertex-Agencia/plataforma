@@ -197,9 +197,9 @@ export function Dashboard() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         {/* Parcelas pendentes */}
         <Card className="p-5">
-          <p className="text-sm font-medium text-[#fafafa] mb-4">Aguardando Pagamento</p>
+          <p className="text-sm font-medium text-[#fafafa] mb-4">Receita a Entrar — Próximo Mês</p>
           {(metrics?.parcelas_pendentes ?? []).length === 0 ? (
-            <EmptyState title="Nenhuma parcela pendente" description="Todas as parcelas estão em dia." />
+            <EmptyState title="Nenhuma parcela prevista" description="Nenhuma parcela com vencimento no próximo mês." />
           ) : (
             <div className="flex flex-col gap-2">
               {(metrics?.parcelas_pendentes ?? []).slice(0, 6).map((p) => {
