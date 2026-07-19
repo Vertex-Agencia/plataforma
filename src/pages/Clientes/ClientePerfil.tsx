@@ -1,13 +1,22 @@
+import { useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Download, Upload, CheckCircle } from 'lucide-react'
-import { useRef } from 'react'
-import { getClienteById, getParcelasByCliente, marcarParcelaPaga, uploadContrato, getManutencaoByCliente } from '../../services/clientes'
+import { ArrowLeft, Download, Upload, CheckCircle, RotateCcw } from 'lucide-react'
+import {
+  getClienteById,
+  getParcelasByCliente,
+  registrarPagamentoParcela,
+  reverterParcelaPendente,
+  uploadContrato,
+  getManutencaoByCliente,
+} from '../../services/clientes'
 import { useAuthStore } from '../../store/authStore'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
 import { Avatar } from '../../components/ui/Avatar'
 import { Button } from '../../components/ui/Button'
+import { Modal } from '../../components/ui/Modal'
+import { Input } from '../../components/ui/Input'
 import { PageSpinner } from '../../components/ui/Spinner'
 import { formatCurrency, formatDate } from '../../utils/format'
 import type { StatusCliente, TipoServico, StatusParcela, Cliente, Parcela, ManutencaoRecorrente } from '../../types/database'
@@ -31,6 +40,10 @@ export function ClientePerfil() {
 
   const clienteId = Number(id)
 
+  const [pagandoParcela, setPagandoParcela] = useState<Parcela | null>(null)
+  const [valorDigitado, setValorDigitado] = useState('')
+  const [revertendoId, setRevertendoId] = useState<number | null>(null)
+
   const { data: cliente, isLoading, isError } = useQuery<Cliente>({
     queryKey: ['cliente', user?.id, clienteId],
     queryFn: () => getClienteById(clienteId),
@@ -49,11 +62,33 @@ export function ClientePerfil() {
     enabled: !!user && !isNaN(clienteId),
   })
 
+  function invalidar() {
+    queryClient.invalidateQueries({ queryKey: ['parcelas', user?.id, clienteId] })
+    queryClient.invalidateQueries({ queryKey: ['dashboard-metrics', user?.id] })
+  }
+
   const pagarMutation = useMutation({
-    mutationFn: (parcelaId: number) => marcarParcelaPaga(parcelaId),
+    mutationFn: () => {
+      const valor = parseFloat(valorDigitado.replace(',', '.'))
+      return registrarPagamentoParcela(
+        pagandoParcela!.id,
+        valor,
+        parcelas ?? [],
+        Number(cliente!.valor_total_acordado)
+      )
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['parcelas', user?.id, clienteId] })
-      queryClient.invalidateQueries({ queryKey: ['dashboard-metrics', user?.id] })
+      invalidar()
+      setPagandoParcela(null)
+      setValorDigitado('')
+    },
+  })
+
+  const reverterMutation = useMutation({
+    mutationFn: (parcelaId: number) => reverterParcelaPendente(parcelaId),
+    onSuccess: () => {
+      invalidar()
+      setRevertendoId(null)
     },
   })
 
@@ -61,6 +96,16 @@ export function ClientePerfil() {
     mutationFn: (file: File) => uploadContrato(clienteId, user!.id, file),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cliente', user?.id, clienteId] }),
   })
+
+  function abrirModalPagamento(parcela: Parcela) {
+    setPagandoParcela(parcela)
+    setValorDigitado(Number(parcela.valor_parcela).toFixed(2).replace('.', ','))
+  }
+
+  function valorValido() {
+    const v = parseFloat(valorDigitado.replace(',', '.'))
+    return !isNaN(v) && v > 0
+  }
 
   if (isLoading) return <PageSpinner />
   if (isError) return (
@@ -82,6 +127,13 @@ export function ClientePerfil() {
 
   const totalPago = (parcelas ?? []).filter((p) => p.status === 'pago').reduce((s, p) => s + Number(p.valor_parcela), 0)
   const totalPendente = (parcelas ?? []).filter((p) => p.status === 'pendente').reduce((s, p) => s + Number(p.valor_parcela), 0)
+
+  const valorPagamento = parseFloat(valorDigitado.replace(',', '.'))
+  const valorOriginal = pagandoParcela ? Number(pagandoParcela.valor_parcela) : 0
+  const temDiferenca = valorValido() && Math.abs(valorPagamento - valorOriginal) > 0.001
+  const pendentesRestantes = (parcelas ?? []).filter(
+    (p) => p.status === 'pendente' && p.id !== pagandoParcela?.id
+  ).length
 
   return (
     <div className="flex flex-col gap-5">
@@ -115,7 +167,6 @@ export function ClientePerfil() {
           </div>
         </div>
 
-        {/* Summary */}
         <div className="grid grid-cols-3 gap-4 mt-5 pt-5 border-t border-[rgba(255,255,255,0.07)]">
           <div>
             <p className="text-xs text-[#a1a1aa] uppercase tracking-wider">Pago</p>
@@ -127,7 +178,7 @@ export function ClientePerfil() {
           </div>
           <div>
             <p className="text-xs text-[#a1a1aa] uppercase tracking-wider">Parcelas</p>
-            <p className="text-lg font-semibold text-[#fafafa] mt-0.5">{(parcelas ?? []).filter(p => p.status === 'pago').length}/{parcelas?.length ?? 0}</p>
+            <p className="text-lg font-semibold text-[#fafafa] mt-0.5">{(parcelas ?? []).filter((p) => p.status === 'pago').length}/{parcelas?.length ?? 0}</p>
           </div>
         </div>
       </Card>
@@ -150,15 +201,22 @@ export function ClientePerfil() {
                   </p>
                 </div>
                 <Badge variant={parcelaVariant[p.status]}>{p.status}</Badge>
-                {p.status === 'pendente' && (
+                {p.status === 'pendente' ? (
                   <Button
                     size="sm"
                     variant="accent"
-                    loading={pagarMutation.isPending}
-                    onClick={() => pagarMutation.mutate(p.id)}
+                    onClick={() => abrirModalPagamento(p)}
                   >
                     <CheckCircle size={14} /> Pago
                   </Button>
+                ) : (
+                  <button
+                    title="Reverter para pendente"
+                    onClick={() => setRevertendoId(p.id)}
+                    className="p-1.5 rounded-[6px] text-[#52525b] hover:text-[#f59e0b] hover:bg-[#f59e0b1a] transition-colors"
+                  >
+                    <RotateCcw size={14} />
+                  </button>
                 )}
               </div>
             ))}
@@ -167,7 +225,6 @@ export function ClientePerfil() {
 
         {/* Sidebar */}
         <div className="flex flex-col gap-4">
-          {/* Contrato */}
           <Card className="p-5">
             <p className="text-sm font-semibold text-[#fafafa] mb-3">Contrato</p>
             {cliente.contrato_url ? (
@@ -188,7 +245,6 @@ export function ClientePerfil() {
             </Button>
           </Card>
 
-          {/* Manutenção */}
           {manutencao && (
             <Card className="p-5" accentColor="#a78bfa">
               <p className="text-sm font-semibold text-[#fafafa] mb-3">Manutenção Recorrente</p>
@@ -214,6 +270,77 @@ export function ClientePerfil() {
           )}
         </div>
       </div>
+
+      {/* Modal: registrar pagamento */}
+      <Modal
+        open={!!pagandoParcela}
+        onClose={() => { setPagandoParcela(null); setValorDigitado('') }}
+        title={`Parcela ${pagandoParcela?.numero_parcela} — Registrar pagamento`}
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => { setPagandoParcela(null); setValorDigitado('') }}>Cancelar</Button>
+            <Button
+              variant="accent"
+              loading={pagarMutation.isPending}
+              onClick={() => pagarMutation.mutate()}
+              disabled={!valorValido()}
+            >
+              <CheckCircle size={14} /> Confirmar
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex justify-between text-sm">
+            <span className="text-[#a1a1aa]">Valor da parcela</span>
+            <span className="text-[#fafafa] font-medium">{formatCurrency(valorOriginal)}</span>
+          </div>
+          <Input
+            label="Valor recebido (R$)"
+            value={valorDigitado}
+            onChange={(e) => setValorDigitado(e.target.value)}
+            placeholder="0,00"
+            autoFocus
+          />
+          {temDiferenca && pendentesRestantes > 0 && (
+            <div className="rounded-[8px] bg-[#f59e0b1a] border border-[#f59e0b33] px-3 py-2.5">
+              <p className="text-xs text-[#f59e0b]">
+                O valor difere da parcela original. As {pendentesRestantes} parcela{pendentesRestantes > 1 ? 's' : ''} pendente{pendentesRestantes > 1 ? 's' : ''} restante{pendentesRestantes > 1 ? 's' : ''} serão recalculadas automaticamente com o saldo devedor.
+              </p>
+            </div>
+          )}
+          {temDiferenca && pendentesRestantes === 0 && (
+            <div className="rounded-[8px] bg-[#ef44441a] border border-[#ef444433] px-3 py-2.5">
+              <p className="text-xs text-[#ef4444]">
+                Não há parcelas pendentes para redistribuir o saldo. Apenas o valor informado será registrado.
+              </p>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Modal: confirmar reversão */}
+      <Modal
+        open={revertendoId !== null}
+        onClose={() => setRevertendoId(null)}
+        title="Reverter pagamento"
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => setRevertendoId(null)}>Cancelar</Button>
+            <Button
+              variant="danger"
+              loading={reverterMutation.isPending}
+              onClick={() => reverterMutation.mutate(revertendoId!)}
+            >
+              Reverter para pendente
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-[#a1a1aa]">
+          Tem certeza que deseja marcar esta parcela como <span className="text-[#fafafa] font-medium">pendente</span> novamente? O valor da parcela será mantido.
+        </p>
+      </Modal>
     </div>
   )
 }

@@ -112,6 +112,49 @@ export async function marcarParcelaPaga(parcelaId: number) {
   if (error) throw error
 }
 
+export async function reverterParcelaPendente(parcelaId: number) {
+  const { error } = await supabase
+    .from('parcelas')
+    .update({ status: 'pendente', data_pagamento: null })
+    .eq('id', parcelaId)
+  if (error) throw error
+}
+
+export async function registrarPagamentoParcela(
+  parcelaId: number,
+  valorPago: number,
+  todasParcelas: Parcela[],
+  valorTotalAcordado: number
+) {
+  const { error } = await supabase
+    .from('parcelas')
+    .update({ status: 'pago', data_pagamento: new Date().toISOString(), valor_parcela: valorPago })
+    .eq('id', parcelaId)
+  if (error) throw error
+
+  const totalJaPago =
+    todasParcelas
+      .filter((p) => p.status === 'pago' && p.id !== parcelaId)
+      .reduce((s, p) => s + Number(p.valor_parcela), 0) + valorPago
+
+  const saldoRestante = valorTotalAcordado - totalJaPago
+  const pendentes = todasParcelas.filter((p) => p.status === 'pendente' && p.id !== parcelaId)
+
+  if (pendentes.length === 0 || saldoRestante <= 0) return
+
+  const base = Math.floor((saldoRestante / pendentes.length) * 100) / 100
+  const ajuste = Math.round((saldoRestante - base * pendentes.length) * 100) / 100
+
+  await Promise.all(
+    pendentes.map((p, i) =>
+      supabase
+        .from('parcelas')
+        .update({ valor_parcela: i === 0 ? base + ajuste : base })
+        .eq('id', p.id)
+    )
+  )
+}
+
 export async function deleteClientes(ids: number[]) {
   await supabase.from('manutencao_recorrente').delete().in('cliente_id', ids)
   await supabase.from('parcelas').delete().in('cliente_id', ids)
