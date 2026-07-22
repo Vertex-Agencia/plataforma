@@ -45,6 +45,13 @@ export function calcPercentChange(current: number, previous: number): number {
   return ((current - previous) / Math.abs(previous)) * 100
 }
 
+export function getErrorMessage(err: unknown, fallback = 'Ocorreu um erro.'): string {
+  if (err && typeof err === 'object' && 'message' in err && typeof (err as { message: unknown }).message === 'string') {
+    return (err as { message: string }).message
+  }
+  return fallback
+}
+
 export function avatarColor(name: string): string {
   const colors = [
     '#22c55e', '#3b82f6', '#a78bfa', '#f59e0b', '#ef4444',

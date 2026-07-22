@@ -1,9 +1,12 @@
-import { useState, useRef } from 'react'
-import { LogOut, Upload, X, ImageIcon } from 'lucide-react'
+import { useEffect, useState, useRef } from 'react'
+import { LogOut, Upload, X, ImageIcon, KeyRound, Eye, EyeOff } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { supabase } from '../../lib/supabase'
+import { getConfiguracoes, salvarApifyToken } from '../../services/configuracoes'
+import { getErrorMessage } from '../../utils/format'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
+import { Input } from '../../components/ui/Input'
 import { Avatar } from '../../components/ui/Avatar'
 
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/svg+xml', 'image/webp']
@@ -18,6 +21,36 @@ export function Configuracoes() {
   const logoUrl: string | null = user?.user_metadata?.logo_url ?? null
   const email = user?.email ?? ''
   const name = user?.user_metadata?.name ?? email.split('@')[0]
+
+  const [apifyToken, setApifyToken] = useState('')
+  const [apifyTokenVisible, setApifyTokenVisible] = useState(false)
+  const [apifyLoading, setApifyLoading] = useState(true)
+  const [apifySaving, setApifySaving] = useState(false)
+  const [apifyError, setApifyError] = useState<string | null>(null)
+  const [apifySaved, setApifySaved] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+    getConfiguracoes(user.id)
+      .then((config) => setApifyToken(config?.apify_api_token ?? ''))
+      .catch((err) => setApifyError(getErrorMessage(err, 'Erro ao carregar configurações.')))
+      .finally(() => setApifyLoading(false))
+  }, [user])
+
+  async function handleSalvarApifyToken() {
+    if (!user) return
+    setApifySaving(true)
+    setApifyError(null)
+    setApifySaved(false)
+    try {
+      await salvarApifyToken(user.id, apifyToken)
+      setApifySaved(true)
+    } catch (err) {
+      setApifyError(getErrorMessage(err, 'Erro ao salvar chave.'))
+    } finally {
+      setApifySaving(false)
+    }
+  }
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -135,6 +168,43 @@ export function Configuracoes() {
         {uploadError && (
           <p className="text-xs text-[#ef4444] mt-3">{uploadError}</p>
         )}
+      </Card>
+
+      <Card className="p-5">
+        <p className="text-sm font-semibold text-[#fafafa] mb-1 flex items-center gap-2">
+          <KeyRound size={15} /> Busca de Leads
+        </p>
+        <p className="text-xs text-[#71717a] mb-4">
+          Chave de API usada na busca automática de leads. Fica salva apenas para sua conta.
+        </p>
+
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Input
+                type={apifyTokenVisible ? 'text' : 'password'}
+                placeholder="Cole sua chave de API..."
+                value={apifyToken}
+                disabled={apifyLoading}
+                onChange={(e) => { setApifyToken(e.target.value); setApifySaved(false) }}
+                className="pr-9"
+              />
+              <button
+                type="button"
+                onClick={() => setApifyTokenVisible((v) => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#71717a] hover:text-[#fafafa] transition-colors"
+                title={apifyTokenVisible ? 'Ocultar' : 'Mostrar'}
+              >
+                {apifyTokenVisible ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+            <Button variant="accent" size="md" loading={apifySaving} disabled={apifyLoading} onClick={handleSalvarApifyToken}>
+              Salvar
+            </Button>
+          </div>
+          {apifyError && <p className="text-xs text-[#ef4444]">{apifyError}</p>}
+          {apifySaved && <p className="text-xs text-[#22c55e]">Chave salva com sucesso.</p>}
+        </div>
       </Card>
 
       <Card className="p-5">

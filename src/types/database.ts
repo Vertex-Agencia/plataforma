@@ -12,6 +12,8 @@ export type NivelComplexidade = 'baixo' | 'medio' | 'alto'
 export type StatusReuniao = 'agendada' | 'realizada' | 'cancelada'
 export type StatusLeitura = 'nao_lido' | 'lido'
 export type StatusManutencaoRecorrente = 'ativo' | 'encerrado'
+export type OrigemLead = 'manual' | 'apify_google_maps'
+export type StatusLeadBusca = 'pendente' | 'concluida' | 'erro'
 
 export interface Cliente {
   id: number
@@ -141,6 +143,71 @@ export interface Insight {
   updated_at: string
 }
 
+export interface PipelineEtapa {
+  id: number
+  user_id: string
+  nome: string
+  cor: string
+  ordem: number
+  created_at: string
+  updated_at: string
+}
+
+export interface LeadBuscaResultadoItem {
+  nome: string
+  telefone: string | null
+  endereco: string | null
+  site: string | null
+  categoria: string | null
+  avaliacao: number | null
+  total_avaliacoes: number | null
+  place_id: string | null
+  observacoes?: string | null
+}
+
+export interface LeadBusca {
+  id: number
+  user_id: string
+  termo_busca: string
+  localizacao: string
+  quantidade_solicitada: number
+  quantidade_encontrada: number | null
+  status: StatusLeadBusca
+  erro_mensagem: string | null
+  resultados: LeadBuscaResultadoItem[] | null
+  enviado_pipeline: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Lead {
+  id: number
+  user_id: string
+  etapa_id: number
+  busca_id: number | null
+  nome: string
+  telefone: string | null
+  email: string | null
+  endereco: string | null
+  site: string | null
+  categoria: string | null
+  avaliacao: number | null
+  total_avaliacoes: number | null
+  place_id: string | null
+  origem: OrigemLead
+  observacoes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Configuracao {
+  id: number
+  user_id: string
+  apify_api_token: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -202,6 +269,30 @@ export interface Database {
         Row: Insight
         Insert: Omit<Insight, 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Omit<Insight, 'id' | 'user_id' | 'created_at' | 'updated_at'>>
+        Relationships: []
+      }
+      pipeline_etapas: {
+        Row: PipelineEtapa
+        Insert: Omit<PipelineEtapa, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<PipelineEtapa, 'id' | 'user_id' | 'created_at' | 'updated_at'>>
+        Relationships: []
+      }
+      lead_buscas: {
+        Row: LeadBusca
+        Insert: Omit<LeadBusca, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<LeadBusca, 'id' | 'user_id' | 'created_at' | 'updated_at'>>
+        Relationships: []
+      }
+      leads: {
+        Row: Lead
+        Insert: Omit<Lead, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<Lead, 'id' | 'user_id' | 'created_at' | 'updated_at'>>
+        Relationships: []
+      }
+      configuracoes: {
+        Row: Configuracao
+        Insert: Omit<Configuracao, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<Configuracao, 'id' | 'user_id' | 'created_at' | 'updated_at'>>
         Relationships: []
       }
     }

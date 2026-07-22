@@ -9,6 +9,8 @@ import { Login } from './pages/Login'
 import { Dashboard } from './pages/Dashboard'
 import { Clientes } from './pages/Clientes'
 import { ClientePerfil } from './pages/Clientes/ClientePerfil'
+import { Leads } from './pages/Leads'
+import { BuscaLeads } from './pages/Leads/BuscaLeads'
 import { Financeiro } from './pages/Financeiro'
 import { Projetos, ProjetoPerfil } from './pages/Projetos'
 import { Reunioes } from './pages/Reunioes'
@@ -57,6 +59,8 @@ export default function App() {
               <Route index element={<Dashboard />} />
               <Route path="clientes" element={<Clientes />} />
               <Route path="clientes/:id" element={<ClientePerfil />} />
+              <Route path="leads" element={<Leads />} />
+              <Route path="leads/buscar" element={<BuscaLeads />} />
               <Route path="financeiro" element={<Financeiro />} />
               <Route path="projetos" element={<Projetos />} />
               <Route path="projetos/:id" element={<ProjetoPerfil />} />
