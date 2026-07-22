@@ -2,12 +2,12 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard,
   Users,
+  Target,
   Wallet,
   FolderKanban,
   CalendarClock,
   BookOpen,
   Settings,
-  Zap,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
@@ -16,6 +16,7 @@ import { useAuthStore } from '../../store/authStore'
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/clientes', icon: Users, label: 'Clientes' },
+  { to: '/leads', icon: Target, label: 'Leads' },
   { to: '/financeiro', icon: Wallet, label: 'Financeiro' },
   { to: '/projetos', icon: FolderKanban, label: 'Projetos' },
   { to: '/reunioes', icon: CalendarClock, label: 'Reuniões' },
@@ -37,31 +38,21 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       style={{ width: collapsed ? '56px' : '224px' }}
     >
       {/* Logo */}
-      <div className="px-3 pt-4 pb-3 border-b border-[rgba(255,255,255,0.07)] flex items-center gap-2.5 min-h-[56px]">
-        {logoUrl ? (
-          <img
-            src={logoUrl}
-            alt="Logo"
-            className="shrink-0 object-contain rounded-[6px]"
-            style={{ width: collapsed ? '32px' : '40px', height: collapsed ? '32px' : '40px' }}
-          />
-        ) : (
-          <div className="w-8 h-8 rounded-[8px] bg-[#22c55e] flex items-center justify-center shrink-0">
-            <Zap size={16} className="text-[#09090b]" fill="currentColor" />
-          </div>
-        )}
+      <div className={`border-b border-[rgba(255,255,255,0.07)] flex items-center min-h-[56px] ${collapsed ? 'justify-center px-1' : 'px-3 gap-2.5'}`}>
+        <img
+          src={collapsed ? (logoUrl ?? '/vertex-mark.png') : (logoUrl ?? '/vertex-logo.png')}
+          alt="Vertex"
+          className={`object-contain shrink-0 ${collapsed ? 'h-8 w-8' : 'h-8 w-auto max-w-[130px]'}`}
+        />
 
         {!collapsed && (
-          <>
-            <span className="font-semibold text-[#fafafa] text-base tracking-tight whitespace-nowrap">Vertex</span>
-            <div className="ml-auto flex items-center gap-1.5 bg-[#22c55e]/10 border border-[#22c55e]/20 rounded-full px-2 py-0.5">
-              <span className="relative flex h-1.5 w-1.5 shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#22c55e] opacity-75" />
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#22c55e]" />
-              </span>
-              <span className="text-[#22c55e] text-[10px] font-semibold tracking-wider">LIVE</span>
-            </div>
-          </>
+          <div className="ml-auto flex items-center gap-1.5 bg-[#22c55e]/10 border border-[#22c55e]/20 rounded-full px-2 py-0.5 shrink-0">
+            <span className="relative flex h-1.5 w-1.5 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#22c55e] opacity-75" />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#22c55e]" />
+            </span>
+            <span className="text-[#22c55e] text-[10px] font-semibold tracking-wider">LIVE</span>
+          </div>
         )}
       </div>
 
@@ -74,7 +65,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             end={to === '/'}
             title={collapsed ? label : undefined}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-2.5 py-2 rounded-[8px] text-sm transition-colors ${
+              `relative flex items-center gap-3 px-2.5 py-2 rounded-[8px] text-sm transition-colors ${
                 collapsed ? 'justify-center' : ''
               } ${
                 isActive
@@ -83,8 +74,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               }`
             }
           >
-            <Icon size={16} className="shrink-0" />
-            {!collapsed && <span className="whitespace-nowrap">{label}</span>}
+            {({ isActive }) => (
+              <>
+                {isActive && <span className="absolute left-[-8px] top-1/2 -translate-y-1/2 h-4 w-[2px] bg-[#22c55e] rounded-full" />}
+                <Icon size={16} className="shrink-0" />
+                {!collapsed && <span className="whitespace-nowrap">{label}</span>}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>

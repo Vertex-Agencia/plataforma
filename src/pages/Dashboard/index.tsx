@@ -41,11 +41,11 @@ function MetricCard({ title, value, icon: Icon, accentColor }: {
   return (
     <Card accentColor={accentColor} className="p-5">
       <div className="flex items-start justify-between gap-2">
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <p className="text-xs text-[#a1a1aa] font-medium uppercase tracking-wider">{title}</p>
-          <p className="text-2xl font-semibold text-[#fafafa] mt-1.5">{value}</p>
+          <p className="font-display text-2xl font-semibold text-[#fafafa] mt-1.5 tabular-nums truncate">{value}</p>
         </div>
-        <div className="w-9 h-9 rounded-[8px] flex items-center justify-center" style={{ backgroundColor: accentColor + '15' }}>
+        <div className="w-9 h-9 rounded-[8px] flex items-center justify-center shrink-0" style={{ backgroundColor: accentColor + '15' }}>
           <Icon size={18} style={{ color: accentColor }} />
         </div>
       </div>
@@ -162,19 +162,19 @@ export function Dashboard() {
       {/* MRR Meta */}
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-medium text-[#fafafa]">Meta MRR</p>
-          <span className="text-sm text-[#a1a1aa]">{formatCurrency(mrrAtual)} / {formatCurrency(MRR_META)}</span>
+          <p className="font-display text-sm font-medium text-[#fafafa]">Meta MRR</p>
+          <span className="font-mono text-sm text-[#a1a1aa] tabular-nums">{formatCurrency(mrrAtual)} / {formatCurrency(MRR_META)}</span>
         </div>
         <div className="h-2 bg-[#27272a] rounded-full overflow-hidden">
           <div className="h-full bg-[#22c55e] rounded-full transition-all duration-500" style={{ width: `${mrrProgress}%` }} />
         </div>
-        <p className="text-xs text-[#a1a1aa] mt-2">{mrrProgress.toFixed(1)}% da meta atingida</p>
+        <p className="font-mono text-xs text-[#a1a1aa] mt-2 tabular-nums">{mrrProgress.toFixed(1)}% da meta atingida</p>
       </Card>
 
       {/* Charts */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <Card className="p-5 xl:col-span-2">
-          <p className="text-sm font-medium text-[#fafafa] mb-4">Receita vs Lucro (6 meses)</p>
+          <p className="font-display font-display text-sm font-medium text-[#fafafa] mb-4">Receita vs Lucro (6 meses)</p>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={chartData ?? []}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
@@ -191,7 +191,7 @@ export function Dashboard() {
         </Card>
 
         <Card className="p-5">
-          <p className="text-sm font-medium text-[#fafafa] mb-4">Receita por Tipo</p>
+          <p className="font-display text-sm font-medium text-[#fafafa] mb-4">Receita por Tipo</p>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie data={donutData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} dataKey="value" paddingAngle={3}>
@@ -212,7 +212,7 @@ export function Dashboard() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         {/* Parcelas pendentes */}
         <Card className="p-5">
-          <p className="text-sm font-medium text-[#fafafa] mb-4">Receita a Entrar — Próximo Mês</p>
+          <p className="font-display text-sm font-medium text-[#fafafa] mb-4">Receita a Entrar — Próximo Mês</p>
           {(metrics?.parcelas_pendentes ?? []).length === 0 ? (
             <EmptyState title="Nenhuma parcela prevista" description="Nenhuma parcela com vencimento no próximo mês." />
           ) : (
@@ -226,10 +226,10 @@ export function Dashboard() {
                     <Avatar name={nome} size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-[#fafafa] truncate">{nome}</p>
-                      <p className="text-xs text-[#a1a1aa]">{p.numero_parcela}/{p.total_parcelas} · Vence {formatDate(p.data_vencimento)}</p>
+                      <p className="font-mono text-xs text-[#a1a1aa] tabular-nums">{p.numero_parcela}/{p.total_parcelas} · Vence {formatDate(p.data_vencimento)}</p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-sm font-medium text-[#fafafa]">{formatCurrency(Number(p.valor_parcela))}</p>
+                      <p className="font-mono text-sm font-medium text-[#fafafa] tabular-nums">{formatCurrency(Number(p.valor_parcela))}</p>
                       <Badge variant={atrasado ? 'red' : 'amber'}>{atrasado ? 'Atrasado' : 'Pendente'}</Badge>
                     </div>
                     <button
@@ -249,7 +249,7 @@ export function Dashboard() {
 
         {/* Alertas manutenção */}
         <Card className="p-5">
-          <p className="text-sm font-medium text-[#fafafa] mb-4">Alertas de Manutenção</p>
+          <p className="font-display text-sm font-medium text-[#fafafa] mb-4">Alertas de Manutenção</p>
           {manutencoesAlerta.length === 0 ? (
             <EmptyState title="Nenhum alerta" description="Nenhuma manutenção vencendo nos próximos 5 dias." />
           ) : (
@@ -268,7 +268,7 @@ export function Dashboard() {
                     <Avatar name={nome} size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-[#fafafa] truncate">{nome}</p>
-                      <p className="text-xs text-[#a1a1aa]">Vence {formatDate(m.data_vencimento_atual)}</p>
+                      <p className="font-mono text-xs text-[#a1a1aa] tabular-nums">Vence {formatDate(m.data_vencimento_atual)}</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <AlertTriangle size={14} className={urgente ? 'text-[#ef4444]' : 'text-[#f59e0b]'} />

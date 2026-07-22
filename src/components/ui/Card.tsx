@@ -11,10 +11,13 @@ export function Card({ children, className = '', accentColor, onClick }: CardPro
   return (
     <div
       onClick={onClick}
-      className={`bg-[#111113] border border-[rgba(255,255,255,0.07)] rounded-[12px] overflow-hidden ${onClick ? 'cursor-pointer hover:bg-[#18181b] transition-colors' : ''} ${className}`}
+      className={`relative bg-[#111113] border border-[rgba(255,255,255,0.07)] rounded-card overflow-hidden ${onClick ? 'cursor-pointer hover:border-[rgba(255,255,255,0.14)] transition-colors' : ''} ${className}`}
     >
       {accentColor && (
-        <div className="h-[3px] w-full" style={{ backgroundColor: accentColor }} />
+        <div
+          className="absolute top-0 left-0 w-3.5 h-3.5"
+          style={{ backgroundColor: accentColor, clipPath: 'polygon(0 0, 100% 0, 0 100%)' }}
+        />
       )}
       {children}
     </div>

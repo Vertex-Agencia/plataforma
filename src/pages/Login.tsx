@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
-import { Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
 import { Button } from '../components/ui/Button'
@@ -29,17 +28,12 @@ export function Login() {
     <div className="min-h-screen bg-[#09090b] flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         {/* Logo */}
-        <div className="flex flex-col items-center gap-3 mb-8">
-          <div className="w-12 h-12 rounded-[12px] bg-[#22c55e] flex items-center justify-center">
-            <Zap size={22} className="text-[#09090b]" fill="currentColor" />
-          </div>
-          <div className="text-center">
-            <h1 className="text-xl font-semibold text-[#fafafa]">Vertex</h1>
-            <p className="text-sm text-[#a1a1aa] mt-0.5">Sistema de gestão operacional</p>
-          </div>
+        <div className="flex flex-col items-center gap-4 mb-8">
+          <img src="/vertex-logo.png" alt="Vertex" className="h-12 w-auto object-contain" />
+          <p className="text-sm text-[#a1a1aa]">Sistema de gestão operacional</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-[#111113] border border-[rgba(255,255,255,0.07)] rounded-[12px] p-6 flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="bg-[#111113] border border-[rgba(255,255,255,0.07)] rounded-[10px] p-6 flex flex-col gap-4">
           <Input
             label="Email"
             type="email"

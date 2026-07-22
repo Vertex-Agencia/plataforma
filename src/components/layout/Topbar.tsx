@@ -24,8 +24,8 @@ export function Topbar() {
 
   return (
     <header className="h-14 flex items-center justify-between px-6 border-b border-[rgba(255,255,255,0.07)] bg-[#09090b]/80 backdrop-blur-sm sticky top-0 z-30">
-      <h1 className="text-base font-semibold text-[#fafafa]">{title}</h1>
-      <span className="text-sm text-[#a1a1aa]">{today}</span>
+      <h1 className="font-display text-base font-semibold text-[#fafafa] tracking-tight">{title}</h1>
+      <span className="font-mono text-xs text-[#a1a1aa] tabular-nums">{today}</span>
     </header>
   )
 }
