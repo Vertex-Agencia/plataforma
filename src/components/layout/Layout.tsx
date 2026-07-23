@@ -22,14 +22,14 @@ export function Layout() {
   const sidebarWidth = collapsed ? 56 : 224
 
   return (
-    <div className="flex min-h-screen bg-[#09090b]">
+    <div className="flex min-h-screen bg-[#09090b] overflow-x-hidden">
       <Sidebar collapsed={collapsed} onToggle={toggle} />
       <div
-        className="flex-1 flex flex-col min-h-screen transition-all duration-300"
-        style={{ marginLeft: sidebarWidth }}
+        className="flex flex-col min-h-screen transition-all duration-300 overflow-x-hidden"
+        style={{ marginLeft: sidebarWidth, width: `calc(100vw - ${sidebarWidth}px)` }}
       >
         <Topbar />
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-6 min-w-0 overflow-x-hidden">
           <ErrorBoundary>
             <Outlet />
           </ErrorBoundary>
