@@ -33,23 +33,46 @@ interface NavItem extends NavLeaf {
   children?: NavLeaf[]
 }
 
-const navItems: NavItem[] = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/clientes', icon: Users, label: 'Clientes' },
+interface NavSection {
+  label: string
+  items: NavItem[]
+}
+
+const navSections: NavSection[] = [
   {
-    to: '/leads',
-    icon: Target,
-    label: 'Leads',
-    children: [
-      { to: '/leads', icon: KanbanSquare, label: 'Pipeline' },
-      { to: '/leads/buscar', icon: Radar, label: 'Buscar Leads' },
+    label: 'Geral',
+    items: [{ to: '/', icon: LayoutDashboard, label: 'Dashboard' }],
+  },
+  {
+    label: 'Comercial',
+    items: [
+      {
+        to: '/leads',
+        icon: Target,
+        label: 'Leads',
+        children: [
+          { to: '/leads', icon: KanbanSquare, label: 'Pipeline' },
+          { to: '/leads/buscar', icon: Radar, label: 'Buscar Leads' },
+        ],
+      },
     ],
   },
-  { to: '/financeiro', icon: Wallet, label: 'Financeiro' },
-  { to: '/projetos', icon: FolderKanban, label: 'Projetos' },
-  { to: '/reunioes', icon: CalendarClock, label: 'Reuniões' },
-  { to: '/estudo', icon: BookOpen, label: 'Área de Estudo' },
+  {
+    label: 'Gestão',
+    items: [
+      { to: '/clientes', icon: Users, label: 'Clientes' },
+      { to: '/financeiro', icon: Wallet, label: 'Financeiro' },
+      { to: '/projetos', icon: FolderKanban, label: 'Projetos' },
+      { to: '/reunioes', icon: CalendarClock, label: 'Reuniões' },
+    ],
+  },
+  {
+    label: 'Recursos',
+    items: [{ to: '/estudo', icon: BookOpen, label: 'Área de Estudo' }],
+  },
 ]
+
+const navItems: NavItem[] = navSections.flatMap((s) => s.items)
 
 interface SidebarProps {
   collapsed: boolean
@@ -144,70 +167,25 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile }: Side
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-2 py-3 flex flex-col gap-0.5 overflow-y-auto overflow-x-hidden">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const hasChildren = !!item.children?.length
-
-            // Sem espaço pra acordeão no modo minificado — o item pai vira link direto.
-            if (!hasChildren || collapsed) {
-              return (
-                <NavLink
+        <nav className="flex-1 px-2 py-3 flex flex-col gap-3 overflow-y-auto overflow-x-hidden">
+          {navSections.map((section) => (
+            <div key={section.label} className="flex flex-col gap-0.5">
+              {!collapsed && (
+                <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[#52525b]">
+                  {section.label}
+                </p>
+              )}
+              {section.items.map((item) => (
+                <NavEntry
                   key={item.to}
-                  to={item.to}
-                  end={item.to === '/'}
-                  title={collapsed ? item.label : undefined}
-                  className={({ isActive }) => navLinkClass(collapsed, isActive)}
-                >
-                  {({ isActive }) => (
-                    <>
-                      {isActive && <span className="absolute left-[-8px] top-1/2 -translate-y-1/2 h-4 w-[2px] bg-[#22c55e] rounded-full" />}
-                      <Icon size={16} className="shrink-0" />
-                      {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
-                    </>
-                  )}
-                </NavLink>
-              )
-            }
-
-            const isOpen = openGroups.has(item.to)
-            const groupActive = item.children!.some((c) => c.to === pathname)
-
-            return (
-              <div key={item.to}>
-                <button
-                  onClick={() => toggleGroup(item.to)}
-                  className={`w-full text-left flex items-center gap-3 px-2.5 py-2 rounded-[8px] text-sm transition-colors ${
-                    groupActive ? 'text-[#fafafa]' : 'text-[#a1a1aa] hover:text-[#fafafa] hover:bg-[#18181b]'
-                  }`}
-                >
-                  <Icon size={16} className="shrink-0" />
-                  <span className="whitespace-nowrap flex-1">{item.label}</span>
-                  {isOpen ? <ChevronUp size={14} className="shrink-0" /> : <ChevronDown size={14} className="shrink-0" />}
-                </button>
-
-                <div className={`grid transition-[grid-template-rows] duration-300 ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-                  <ul className="overflow-hidden pl-7 flex flex-col gap-0.5 pt-0.5">
-                    {item.children!.map((child) => (
-                      <li key={child.to}>
-                        <NavLink
-                          to={child.to}
-                          end
-                          className={({ isActive }) =>
-                            `block px-2.5 py-1.5 rounded-[8px] text-sm transition-colors ${
-                              isActive ? 'text-[#22c55e]' : 'text-[#71717a] hover:text-[#fafafa] hover:bg-[#18181b]'
-                            }`
-                          }
-                        >
-                          {child.label}
-                        </NavLink>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            )
-          })}
+                  item={item}
+                  collapsed={collapsed}
+                  isOpen={openGroups.has(item.to)}
+                  onToggleGroup={toggleGroup}
+                />
+              ))}
+            </div>
+          ))}
         </nav>
 
         {/* Conta */}
@@ -261,5 +239,75 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile }: Side
         </div>
       </aside>
     </>
+  )
+}
+
+interface NavEntryProps {
+  item: NavItem
+  collapsed: boolean
+  isOpen: boolean
+  onToggleGroup: (to: string) => void
+}
+
+function NavEntry({ item, collapsed, isOpen, onToggleGroup }: NavEntryProps) {
+  const { pathname } = useLocation()
+  const Icon = item.icon
+  const hasChildren = !!item.children?.length
+
+  // Sem espaço pra acordeão no modo minificado — o item pai vira link direto.
+  if (!hasChildren || collapsed) {
+    return (
+      <NavLink
+        to={item.to}
+        end={item.to === '/'}
+        title={collapsed ? item.label : undefined}
+        className={({ isActive }) => navLinkClass(collapsed, isActive)}
+      >
+        {({ isActive }) => (
+          <>
+            {isActive && <span className="absolute left-[-8px] top-1/2 -translate-y-1/2 h-4 w-[2px] bg-[#22c55e] rounded-full" />}
+            <Icon size={16} className="shrink-0" />
+            {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
+          </>
+        )}
+      </NavLink>
+    )
+  }
+
+  const groupActive = item.children!.some((c) => c.to === pathname)
+
+  return (
+    <div>
+      <button
+        onClick={() => onToggleGroup(item.to)}
+        className={`w-full text-left flex items-center gap-3 px-2.5 py-2 rounded-[8px] text-sm transition-colors ${
+          groupActive ? 'text-[#fafafa]' : 'text-[#a1a1aa] hover:text-[#fafafa] hover:bg-[#18181b]'
+        }`}
+      >
+        <Icon size={16} className="shrink-0" />
+        <span className="whitespace-nowrap flex-1">{item.label}</span>
+        {isOpen ? <ChevronUp size={14} className="shrink-0" /> : <ChevronDown size={14} className="shrink-0" />}
+      </button>
+
+      <div className={`grid transition-[grid-template-rows] duration-300 ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+        <ul className="overflow-hidden pl-7 flex flex-col gap-0.5 pt-0.5">
+          {item.children!.map((child) => (
+            <li key={child.to}>
+              <NavLink
+                to={child.to}
+                end
+                className={({ isActive }) =>
+                  `block px-2.5 py-1.5 rounded-[8px] text-sm transition-colors ${
+                    isActive ? 'text-[#22c55e]' : 'text-[#71717a] hover:text-[#fafafa] hover:bg-[#18181b]'
+                  }`
+                }
+              >
+                {child.label}
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   )
 }
