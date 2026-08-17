@@ -108,6 +108,7 @@ interface BuscarLeadsParams {
   localizacao: string
   quantidade: number
   filtro_site: FiltroSite
+  raio_km?: number | null
 }
 
 interface BuscarLeadsResultado {

@@ -1,22 +1,27 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, MapPin, Building2, Users, Sparkles, Radar,
   CheckCircle2, XCircle, Clock, History, KanbanSquare,
-  Trash2, Phone, Globe, Star, Send, Eye,
+  Trash2, Phone, Globe, Star, Send, Eye, Ruler,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { buscarLeadsApify, getHistoricoBuscas, deleteBusca, enviarBuscaParaPipeline, atualizarObservacaoResultado } from '../../services/leads'
 import type { FiltroSite } from '../../services/leads'
+import { geocodificar } from '../../services/geocoding'
+import type { GeoPonto } from '../../services/geocoding'
 import type { LeadBusca } from '../../types/database'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { Badge } from '../../components/ui/Badge'
 import { Textarea } from '../../components/ui/Input'
 import { getErrorMessage, formatDateTime } from '../../utils/format'
+import { RadarMap } from './components/RadarMap'
 
 const QUANTIDADES_PRESET = [10, 20, 50, 100]
+const RAIOS_PRESET_KM = [1, 3, 5, 10, 20, 50]
+const GEOCODE_DEBOUNCE_MS = 800
 
 const FILTRO_SITE_OPTIONS: { value: FiltroSite; label: string }[] = [
   { value: 'ambos', label: 'Ambos' },
@@ -30,6 +35,21 @@ const buscaStatusConfig: Record<LeadBusca['status'], { label: string; variant: '
   erro: { label: 'Erro', variant: 'red', icon: XCircle },
 }
 
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-all ${
+        active
+          ? 'bg-[#22c55e] text-[#09090b] shadow-[0_0_0_3px_rgba(34,197,94,0.15)]'
+          : 'bg-[#18181b] text-[#a1a1aa] border border-[rgba(255,255,255,0.07)] hover:text-[#fafafa] hover:border-[rgba(255,255,255,0.14)]'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
 export function BuscaLeads() {
   const { user } = useAuthStore()
   const navigate = useNavigate()
@@ -39,11 +59,38 @@ export function BuscaLeads() {
   const [localizacao, setLocalizacao] = useState('')
   const [quantidade, setQuantidade] = useState(20)
   const [filtroSite, setFiltroSite] = useState<FiltroSite>('ambos')
+  const [raioKm, setRaioKm] = useState<number | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [buscaSelecionada, setBuscaSelecionada] = useState<LeadBusca | null>(null)
   const [envioResultado, setEnvioResultado] = useState<{ novos: number; duplicados: number } | null>(null)
   const [itemDetalheIndex, setItemDetalheIndex] = useState<number | null>(null)
   const [observacaoRascunho, setObservacaoRascunho] = useState('')
+
+  const [geo, setGeo] = useState<GeoPonto | null>(null)
+  const [geoLoading, setGeoLoading] = useState(false)
+
+  // Geocodifica a localização digitada (debounced) só para posicionar o mapa —
+  // é independente do raio, que é aplicado como um círculo por cima quando escolhido.
+  useEffect(() => {
+    let ativo = true
+    const t = setTimeout(async () => {
+      const termo = localizacao.trim()
+      if (termo.length < 3) {
+        if (ativo) { setGeo(null); setGeoLoading(false) }
+        return
+      }
+      if (ativo) setGeoLoading(true)
+      try {
+        const ponto = await geocodificar(termo)
+        if (ativo) setGeo(ponto)
+      } catch {
+        if (ativo) setGeo(null)
+      } finally {
+        if (ativo) setGeoLoading(false)
+      }
+    }, GEOCODE_DEBOUNCE_MS)
+    return () => { ativo = false; clearTimeout(t) }
+  }, [localizacao])
 
   const { data: historico, refetch: refetchHistorico } = useQuery<LeadBusca[]>({
     queryKey: ['lead-buscas', user?.id],
@@ -53,7 +100,7 @@ export function BuscaLeads() {
   })
 
   const buscarMutation = useMutation({
-    mutationFn: () => buscarLeadsApify({ termo_busca: termoBusca, localizacao, quantidade, filtro_site: filtroSite }),
+    mutationFn: () => buscarLeadsApify({ termo_busca: termoBusca, localizacao, quantidade, filtro_site: filtroSite, raio_km: raioKm }),
     onMutate: () => setErro(null),
     onSuccess: async (data) => {
       const { data: novoHistorico } = await refetchHistorico()
@@ -107,7 +154,7 @@ export function BuscaLeads() {
   }
 
   return (
-    <div className="flex flex-col gap-6 max-w-3xl mx-auto">
+    <div className="flex flex-col gap-8 max-w-6xl mx-auto">
       <button
         onClick={() => navigate('/leads')}
         className="flex items-center gap-2 text-[#a1a1aa] hover:text-[#fafafa] text-sm transition-colors w-fit"
@@ -115,24 +162,26 @@ export function BuscaLeads() {
         <ArrowLeft size={16} /> Voltar para o Pipeline
       </button>
 
-      {/* Hero */}
-      <div className="relative overflow-hidden rounded-[16px] border border-[rgba(255,255,255,0.07)] bg-[#111113] p-8">
-        <div
-          className="pointer-events-none absolute -top-24 -right-24 w-72 h-72 rounded-full blur-3xl opacity-20"
-          style={{ background: 'radial-gradient(circle, #22c55e, transparent 70%)' }}
-        />
-        <div className="relative flex items-start gap-4">
-          <div className={`w-12 h-12 rounded-[12px] bg-[#22c55e]/10 border border-[#22c55e]/20 flex items-center justify-center shrink-0 transition-shadow ${buscarMutation.isPending ? 'shadow-[0_0_0_6px_rgba(34,197,94,0.08)]' : ''}`}>
-            <Radar size={22} className={`text-[#22c55e] ${buscarMutation.isPending ? 'animate-spin' : ''}`} style={buscarMutation.isPending ? { animationDuration: '2s' } : undefined} />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold text-[#fafafa]">Buscar Leads</h1>
-          </div>
-        </div>
-
+      {/* Hero: form + mapa */}
+      <div className="grid lg:grid-cols-12 gap-5 items-start">
         {/* Form */}
-        <div className="relative flex flex-col gap-4 mt-7">
-          <div className="grid sm:grid-cols-2 gap-4">
+        <div className="lg:col-span-5 relative overflow-hidden rounded-[16px] border border-[rgba(255,255,255,0.07)] bg-[#111113] p-7 flex flex-col gap-5">
+          <div
+            className="pointer-events-none absolute -top-24 -right-24 w-72 h-72 rounded-full blur-3xl opacity-20"
+            style={{ background: 'radial-gradient(circle, #22c55e, transparent 70%)' }}
+          />
+
+          <div className="relative flex items-start gap-3">
+            <div className={`w-11 h-11 rounded-[12px] bg-[#22c55e]/10 border border-[#22c55e]/20 flex items-center justify-center shrink-0 transition-shadow ${buscarMutation.isPending ? 'shadow-[0_0_0_6px_rgba(34,197,94,0.08)]' : ''}`}>
+              <Radar size={20} className={`text-[#22c55e] ${buscarMutation.isPending ? 'animate-spin' : ''}`} style={buscarMutation.isPending ? { animationDuration: '2s' } : undefined} />
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[#52525b]">Radar de prospecção</p>
+              <h1 className="text-xl font-semibold text-[#fafafa] -mt-0.5">Buscar Leads</h1>
+            </div>
+          </div>
+
+          <div className="relative flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-sm text-[#a1a1aa] flex items-center gap-1.5">
                 <Building2 size={13} /> Nicho / termo de busca
@@ -144,93 +193,107 @@ export function BuscaLeads() {
                 className="w-full bg-[#18181b] border border-[rgba(255,255,255,0.07)] rounded-[10px] px-3.5 py-2.5 text-[#fafafa] text-sm placeholder-[#52525b] focus:outline-none focus:border-[#22c55e] transition-colors"
               />
             </div>
+
             <div className="flex flex-col gap-1.5">
               <label className="text-sm text-[#a1a1aa] flex items-center gap-1.5">
                 <MapPin size={13} /> Localização
               </label>
-              <input
-                value={localizacao}
-                onChange={(e) => setLocalizacao(e.target.value)}
-                placeholder="Ex: São Paulo, SP"
-                className="w-full bg-[#18181b] border border-[rgba(255,255,255,0.07)] rounded-[10px] px-3.5 py-2.5 text-[#fafafa] text-sm placeholder-[#52525b] focus:outline-none focus:border-[#22c55e] transition-colors"
-              />
+              <div className="relative">
+                <input
+                  value={localizacao}
+                  onChange={(e) => setLocalizacao(e.target.value)}
+                  placeholder="Ex: São Paulo, SP"
+                  className="w-full bg-[#18181b] border border-[rgba(255,255,255,0.07)] rounded-[10px] px-3.5 py-2.5 text-[#fafafa] text-sm placeholder-[#52525b] focus:outline-none focus:border-[#22c55e] transition-colors"
+                />
+                {geoLoading && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 border-2 border-[#3b82f6] border-t-transparent rounded-full animate-spin" />
+                )}
+                {!geoLoading && geo && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-[#22c55e]" title="Localização encontrada" />
+                )}
+              </div>
             </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm text-[#a1a1aa] flex items-center gap-1.5">
+                <Ruler size={13} /> Raio de busca
+              </label>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Chip active={raioKm === null} onClick={() => setRaioKm(null)}>Sem raio</Chip>
+                {RAIOS_PRESET_KM.map((r) => (
+                  <Chip key={r} active={raioKm === r} onClick={() => setRaioKm(r)}>{r} km</Chip>
+                ))}
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  placeholder="Outro"
+                  value={raioKm !== null && !RAIOS_PRESET_KM.includes(raioKm) ? raioKm : ''}
+                  onChange={(e) => setRaioKm(e.target.value ? Number(e.target.value) : null)}
+                  className="w-20 bg-[#18181b] border border-[rgba(255,255,255,0.07)] rounded-[10px] px-3 py-1.5 text-[#fafafa] text-sm focus:outline-none focus:border-[#22c55e] transition-colors"
+                />
+              </div>
+              <p className="text-xs text-[#52525b]">
+                {raioKm ? `Só entram estabelecimentos a até ${raioKm} km do ponto marcado no mapa.` : 'Sem raio, a busca cobre toda a cidade/região informada.'}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm text-[#a1a1aa] flex items-center gap-1.5">
+                <Users size={13} /> Quantidade de leads
+              </label>
+              <div className="flex items-center gap-2 flex-wrap">
+                {QUANTIDADES_PRESET.map((q) => (
+                  <Chip key={q} active={quantidade === q} onClick={() => setQuantidade(q)}>{q}</Chip>
+                ))}
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={quantidade}
+                  onChange={(e) => setQuantidade(Number(e.target.value))}
+                  className="w-20 bg-[#18181b] border border-[rgba(255,255,255,0.07)] rounded-[10px] px-3 py-1.5 text-[#fafafa] text-sm focus:outline-none focus:border-[#22c55e] transition-colors"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm text-[#a1a1aa] flex items-center gap-1.5">
+                <Globe size={13} /> Site
+              </label>
+              <div className="flex items-center gap-2 flex-wrap">
+                {FILTRO_SITE_OPTIONS.map((opt) => (
+                  <Chip key={opt.value} active={filtroSite === opt.value} onClick={() => setFiltroSite(opt.value)}>{opt.label}</Chip>
+                ))}
+              </div>
+            </div>
+
+            <Button
+              variant="accent"
+              size="lg"
+              className="mt-1 w-full justify-center"
+              disabled={!podeBuscar}
+              loading={buscarMutation.isPending}
+              onClick={() => buscarMutation.mutate()}
+            >
+              <Sparkles size={16} /> {buscarMutation.isPending ? 'Buscando...' : 'Buscar Leads'}
+            </Button>
+
+            <p className="text-xs text-[#52525b]">Os leads encontrados ficam disponíveis para revisão antes de entrar no pipeline.</p>
+
+            {erro && (
+              <div className="flex items-center gap-2 text-sm text-[#ef4444] bg-[#ef44441a] border border-[#ef444433] rounded-[10px] px-3.5 py-2.5">
+                <XCircle size={15} className="shrink-0" /> {erro}
+              </div>
+            )}
           </div>
+        </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm text-[#a1a1aa] flex items-center gap-1.5">
-              <Users size={13} /> Quantidade de leads
-            </label>
-            <div className="flex items-center gap-2 flex-wrap">
-              {QUANTIDADES_PRESET.map((q) => (
-                <button
-                  key={q}
-                  onClick={() => setQuantidade(q)}
-                  className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                    quantidade === q
-                      ? 'bg-[#22c55e] text-[#09090b]'
-                      : 'bg-[#18181b] text-[#a1a1aa] border border-[rgba(255,255,255,0.07)] hover:text-[#fafafa]'
-                  }`}
-                >
-                  {q}
-                </button>
-              ))}
-              <input
-                type="number"
-                min={1}
-                max={500}
-                value={quantidade}
-                onChange={(e) => setQuantidade(Number(e.target.value))}
-                className="w-24 bg-[#18181b] border border-[rgba(255,255,255,0.07)] rounded-[10px] px-3 py-1.5 text-[#fafafa] text-sm focus:outline-none focus:border-[#22c55e] transition-colors"
-              />
-            </div>
+        {/* Mapa */}
+        <div className="lg:col-span-7 lg:sticky lg:top-6">
+          <div className="h-[380px] lg:h-[600px]">
+            <RadarMap geo={geo} geoLoading={geoLoading} raioKm={raioKm} searching={buscarMutation.isPending} />
           </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm text-[#a1a1aa] flex items-center gap-1.5">
-              <Globe size={13} /> Site
-            </label>
-            <div className="flex items-center gap-2 flex-wrap">
-              {FILTRO_SITE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => setFiltroSite(opt.value)}
-                  className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                    filtroSite === opt.value
-                      ? 'bg-[#22c55e] text-[#09090b]'
-                      : 'bg-[#18181b] text-[#a1a1aa] border border-[rgba(255,255,255,0.07)] hover:text-[#fafafa]'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <Button
-            variant="accent"
-            size="lg"
-            className="mt-2 w-fit"
-            disabled={!podeBuscar}
-            loading={buscarMutation.isPending}
-            onClick={() => buscarMutation.mutate()}
-          >
-            <Sparkles size={16} /> {buscarMutation.isPending ? 'Buscando...' : 'Buscar Leads'}
-          </Button>
-
-          {buscarMutation.isPending && (
-            <div className="h-1.5 w-full max-w-xs bg-[#27272a] rounded-full overflow-hidden">
-              <div className="h-full w-1/3 bg-[#22c55e] rounded-full animate-progress-indeterminate" />
-            </div>
-          )}
-
-          <p className="text-xs text-[#52525b]">Os leads encontrados ficam disponíveis para revisão antes de entrar no pipeline.</p>
-
-          {erro && (
-            <div className="flex items-center gap-2 text-sm text-[#ef4444] bg-[#ef44441a] border border-[#ef444433] rounded-[10px] px-3.5 py-2.5">
-              <XCircle size={15} className="shrink-0" /> {erro}
-            </div>
-          )}
         </div>
       </div>
 
@@ -242,51 +305,64 @@ export function BuscaLeads() {
         {(historico ?? []).length === 0 ? (
           <p className="text-xs text-[#52525b]">Nenhuma busca realizada ainda.</p>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {(historico ?? []).map((h) => {
               const config = buscaStatusConfig[h.status]
               const Icon = config.icon
               return (
                 <div
                   key={h.id}
-                  className="flex items-center gap-3 bg-[#111113] border border-[rgba(255,255,255,0.07)] rounded-[10px] px-4 py-3 flex-wrap"
+                  className="flex flex-col gap-3 bg-[#111113] border border-[rgba(255,255,255,0.07)] rounded-[14px] p-4 hover:border-[rgba(255,255,255,0.14)] transition-colors"
                 >
-                  <Icon size={15} className={
-                    h.status === 'concluida' ? 'text-[#22c55e]' : h.status === 'erro' ? 'text-[#ef4444]' : 'text-[#f59e0b]'
-                  } />
-                  <div className="flex-1 min-w-[160px]">
-                    <p className="text-sm text-[#fafafa]">{h.termo_busca}</p>
-                    <p className="text-xs text-[#71717a]">{h.localizacao} · {formatDateTime(h.created_at)}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Icon size={15} className={`shrink-0 ${
+                        h.status === 'concluida' ? 'text-[#22c55e]' : h.status === 'erro' ? 'text-[#ef4444]' : 'text-[#f59e0b]'
+                      }`} />
+                      <p className="text-sm font-medium text-[#fafafa] truncate">{h.termo_busca}</p>
+                    </div>
+                    <Badge variant={config.variant}>{config.label}</Badge>
                   </div>
-                  <Badge variant={config.variant}>{config.label}</Badge>
-                  {h.status === 'concluida' && h.enviado_pipeline && <Badge variant="blue">No pipeline</Badge>}
-                  <span className="text-xs text-[#52525b] w-28 text-right shrink-0">
-                    {h.quantidade_encontrada ?? 0}/{h.quantidade_solicitada} encontrados
-                  </span>
-                  {h.status === 'concluida' && (
-                    <button
-                      onClick={() => abrirBusca(h)}
-                      className="p-1.5 rounded-[6px] text-[#71717a] hover:text-[#fafafa] hover:bg-[#18181b] transition-colors"
-                      title="Ver leads encontrados"
-                    >
-                      <Eye size={14} />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => deleteBuscaMutation.mutate(h.id)}
-                    className="p-1.5 rounded-[6px] text-[#71717a] hover:text-[#ef4444] hover:bg-[#ef44441a] transition-colors"
-                    title="Excluir do histórico"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+
+                  <p className="text-xs text-[#71717a] flex items-center gap-1.5">
+                    <MapPin size={11} className="shrink-0" /> {h.localizacao}
+                  </p>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {h.raio_km && <Badge variant="blue">Raio {h.raio_km}km</Badge>}
+                    {h.status === 'concluida' && h.enviado_pipeline && <Badge variant="purple">No pipeline</Badge>}
+                  </div>
+
                   {h.status === 'pendente' && (
-                    <div className="w-full h-1 bg-[#27272a] rounded-full overflow-hidden mt-1">
+                    <div className="w-full h-1 bg-[#27272a] rounded-full overflow-hidden">
                       <div className="h-full w-1/4 bg-[#f59e0b] rounded-full animate-progress-indeterminate" />
                     </div>
                   )}
-                  {h.erro_mensagem && (
-                    <p className="w-full text-xs text-[#ef4444] mt-1">{h.erro_mensagem}</p>
-                  )}
+                  {h.erro_mensagem && <p className="text-xs text-[#ef4444]">{h.erro_mensagem}</p>}
+
+                  <div className="flex items-center justify-between pt-2 mt-auto border-t border-[rgba(255,255,255,0.05)]">
+                    <span className="text-xs text-[#52525b] font-mono tabular-nums">
+                      {h.quantidade_encontrada ?? 0}/{h.quantidade_solicitada} · {formatDateTime(h.created_at)}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {h.status === 'concluida' && (
+                        <button
+                          onClick={() => abrirBusca(h)}
+                          className="p-1.5 rounded-[6px] text-[#71717a] hover:text-[#fafafa] hover:bg-[#18181b] transition-colors"
+                          title="Ver leads encontrados"
+                        >
+                          <Eye size={14} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => deleteBuscaMutation.mutate(h.id)}
+                        className="p-1.5 rounded-[6px] text-[#71717a] hover:text-[#ef4444] hover:bg-[#ef44441a] transition-colors"
+                        title="Excluir do histórico"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )
             })}

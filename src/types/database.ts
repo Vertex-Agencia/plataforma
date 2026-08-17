@@ -170,6 +170,7 @@ export interface LeadBusca {
   user_id: string
   termo_busca: string
   localizacao: string
+  raio_km: number | null
   quantidade_solicitada: number
   quantidade_encontrada: number | null
   status: StatusLeadBusca

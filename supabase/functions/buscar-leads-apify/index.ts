@@ -17,6 +17,31 @@ interface ApifyGoogleMapsItem {
   placeId?: string
 }
 
+interface NominatimResult {
+  lat: string
+  lon: string
+}
+
+// Geocodifica um endereço/localização em texto livre para lat/lng usando o Nominatim (OpenStreetMap),
+// serviço gratuito sem necessidade de chave de API. Retorna null se não encontrar nada (a busca
+// então cai de volta para o comportamento antigo, por texto livre, sem raio).
+async function geocodificarLocalizacao(localizacao: string): Promise<{ lat: number; lon: number } | null> {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(localizacao)}`
+  const response = await fetch(url, {
+    headers: { 'User-Agent': 'VertexPlataforma/1.0 (busca de leads por raio)' },
+  })
+  if (!response.ok) return null
+
+  const results: NominatimResult[] = await response.json()
+  if (!results[0]) return null
+
+  const lat = Number(results[0].lat)
+  const lon = Number(results[0].lon)
+  if (Number.isNaN(lat) || Number.isNaN(lon)) return null
+
+  return { lat, lon }
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -47,7 +72,7 @@ serve(async (req: Request) => {
   let buscaId: number | null = null
 
   try {
-    const { termo_busca, localizacao, quantidade, filtro_site = 'ambos' } = await req.json()
+    const { termo_busca, localizacao, quantidade, filtro_site = 'ambos', raio_km = null } = await req.json()
 
     if (!termo_busca || !localizacao || !quantidade) {
       return new Response(JSON.stringify({ error: 'Parâmetros obrigatórios ausentes.' }), {
@@ -62,6 +87,7 @@ serve(async (req: Request) => {
         user_id: userId,
         termo_busca,
         localizacao,
+        raio_km,
         quantidade_solicitada: quantidade,
         status: 'pendente',
       })
@@ -85,17 +111,35 @@ serve(async (req: Request) => {
     // para compensar os que serão descartados no filtro e ainda assim tentar atingir "quantidade".
     const quantidadeBruta = filtro_site === 'ambos' ? quantidade : Math.min(quantidade * 3, 500)
 
+    // Busca por raio: geocodifica a localização em texto livre para lat/lng e delimita
+    // a busca do Apify a um círculo (customGeolocation). Se a geocodificação falhar, cai de
+    // volta para a busca por texto livre de sempre (locationQuery) em vez de quebrar a busca.
+    const geo = raio_km && Number(raio_km) > 0 ? await geocodificarLocalizacao(localizacao) : null
+
+    const actorInput = geo
+      ? {
+          searchStringsArray: [termo_busca],
+          customGeolocation: {
+            type: 'Point',
+            coordinates: [geo.lon, geo.lat],
+            radiusKm: Number(raio_km),
+          },
+          maxCrawledPlacesPerSearch: quantidadeBruta,
+          language: 'pt-BR',
+        }
+      : {
+          searchStringsArray: [termo_busca],
+          locationQuery: localizacao,
+          maxCrawledPlacesPerSearch: quantidadeBruta,
+          language: 'pt-BR',
+        }
+
     const buscaResponse = await fetch(
       `https://api.apify.com/v2/acts/compass~crawler-google-places/run-sync-get-dataset-items?token=${apiToken}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          searchStringsArray: [termo_busca],
-          locationQuery: localizacao,
-          maxCrawledPlacesPerSearch: quantidadeBruta,
-          language: 'pt-BR',
-        }),
+        body: JSON.stringify(actorInput),
       }
     )
 
