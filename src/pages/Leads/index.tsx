@@ -20,6 +20,7 @@ import type { Lead, PipelineEtapa, LeadBusca } from '../../types/database'
 import { getErrorMessage } from '../../utils/format'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
+import { TelefoneAcoes } from '../../components/ui/TelefoneAcoes'
 import { Input, Select, Textarea } from '../../components/ui/Input'
 import { PageSpinner } from '../../components/ui/Spinner'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -399,11 +400,7 @@ export function Leads() {
               {leadAtual.categoria && <p className="text-sm text-[#a1a1aa]">{leadAtual.categoria}</p>}
 
               <div className="grid sm:grid-cols-2 gap-3">
-                {leadAtual.telefone && (
-                  <div className="flex items-center gap-2 text-sm text-[#fafafa] bg-[#18181b] rounded-[8px] px-3 py-2">
-                    <Phone size={14} className="text-[#71717a] shrink-0" /> {leadAtual.telefone}
-                  </div>
-                )}
+                {leadAtual.telefone && <TelefoneAcoes telefone={leadAtual.telefone} />}
                 {leadAtual.site && (
                   <a
                     href={leadAtual.site.startsWith('http') ? leadAtual.site : `https://${leadAtual.site}`}

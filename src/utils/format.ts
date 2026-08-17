@@ -52,6 +52,27 @@ export function getErrorMessage(err: unknown, fallback = 'Ocorreu um erro.'): st
   return fallback
 }
 
+export function apenasDigitos(valor: string): string {
+  return valor.replace(/\D/g, '')
+}
+
+// Heurística: no Brasil, números de celular têm 9 dígitos no assinante (começando com 9),
+// diferente de fixos (8 dígitos). Não dá pra confirmar se o número tem WhatsApp sem consultar a
+// API deles, mas ser celular é condição necessária — é o que usamos pra decidir se mostramos o atalho.
+export function pareceCelularBrasileiro(telefone: string): boolean {
+  const digitos = apenasDigitos(telefone)
+  const semPais = digitos.startsWith('55') && digitos.length > 11 ? digitos.slice(2) : digitos
+  if (semPais.length !== 10 && semPais.length !== 11) return false
+  const assinante = semPais.slice(2)
+  return assinante.length === 9 && assinante.startsWith('9')
+}
+
+export function linkWhatsapp(telefone: string): string {
+  const digitos = apenasDigitos(telefone)
+  const comPais = digitos.startsWith('55') ? digitos : `55${digitos}`
+  return `https://wa.me/${comPais}`
+}
+
 export function avatarColor(name: string): string {
   const colors = [
     '#22c55e', '#3b82f6', '#a78bfa', '#f59e0b', '#ef4444',

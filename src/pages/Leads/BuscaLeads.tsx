@@ -16,6 +16,7 @@ import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { Badge } from '../../components/ui/Badge'
 import { Textarea } from '../../components/ui/Input'
+import { TelefoneAcoes } from '../../components/ui/TelefoneAcoes'
 import { getErrorMessage, formatDateTime } from '../../utils/format'
 import { RadarMap } from './components/RadarMap'
 
@@ -495,11 +496,7 @@ export function BuscaLeads() {
             <div className="flex flex-col gap-4">
               {item.categoria && <p className="text-sm text-[#a1a1aa]">{item.categoria}</p>}
               <div className="grid sm:grid-cols-2 gap-3">
-                {item.telefone && (
-                  <div className="flex items-center gap-2 text-sm text-[#fafafa] bg-[#18181b] rounded-[8px] px-3 py-2">
-                    <Phone size={14} className="text-[#71717a] shrink-0" /> {item.telefone}
-                  </div>
-                )}
+                {item.telefone && <TelefoneAcoes telefone={item.telefone} />}
                 {item.site && (
                   <a
                     href={item.site.startsWith('http') ? item.site : `https://${item.site}`}
