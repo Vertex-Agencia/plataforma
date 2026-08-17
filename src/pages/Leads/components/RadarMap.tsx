@@ -61,7 +61,71 @@ function EstadoCarregando() {
   )
 }
 
-function SweepOverlay({ raioKm }: { raioKm: number | null }) {
+// Metros por pixel na projeção Web Mercator (a que o Leaflet usa) para uma latitude e zoom dados.
+// É o que permite converter o raio em km escolhido pelo usuário no tamanho exato, em pixels,
+// do círculo desenhado na tela — pra varredura do radar não "vazar" para fora dele.
+function metrosPorPixel(lat: number, zoom: number): number {
+  return (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom)
+}
+
+interface CirculoTela {
+  x: number
+  y: number
+  r: number
+}
+
+function calcularCirculoTela(map: L.Map, geo: GeoPonto, raioKm: number | null): CirculoTela {
+  const centro = map.latLngToContainerPoint([geo.lat, geo.lon])
+  // Sem raio escolhido, usa um raio decorativo pequeno e fixo em vez de cobrir o mapa inteiro.
+  const raioMetros = raioKm && raioKm > 0 ? raioKm * 1000 : 350
+  const r = Math.max(28, raioMetros / metrosPorPixel(geo.lat, map.getZoom()))
+  return { x: centro.x, y: centro.y, r }
+}
+
+// Varredura de radar presa exatamente aos limites do círculo do raio de busca (não ao painel
+// inteiro). Vive dentro do MapContainer pra ter acesso à instância do mapa via useMap() e
+// recalcular a posição/tamanho em pixels sempre que o usuário arrasta ou dá zoom.
+function VarreduraNoRaio({ geo, raioKm }: { geo: GeoPonto; raioKm: number | null }) {
+  const map = useMap()
+  const [circulo, setCirculo] = useState<CirculoTela>(() => calcularCirculoTela(map, geo, raioKm))
+
+  useEffect(() => {
+    function atualizar() { setCirculo(calcularCirculoTela(map, geo, raioKm)) }
+    atualizar()
+    map.on('move zoom viewreset resize', atualizar)
+    return () => { map.off('move zoom viewreset resize', atualizar) }
+  }, [map, geo, raioKm])
+
+  const size = circulo.r * 2
+
+  return (
+    <>
+      {/* Varredura girando, recortada exatamente no diâmetro do círculo */}
+      <div
+        className="absolute z-[450] pointer-events-none animate-radar-spin rounded-full overflow-hidden"
+        style={{ left: circulo.x - circulo.r, top: circulo.y - circulo.r, width: size, height: size }}
+      >
+        <div
+          className="absolute inset-0"
+          style={{ background: 'conic-gradient(from 0deg, transparent 0deg, rgba(34,197,94,0.42) 25deg, transparent 70deg)' }}
+        />
+      </div>
+      {/* Pulso saindo do centro, contido no mesmo raio */}
+      <span
+        className="absolute z-[450] pointer-events-none rounded-full bg-[#22c55e]/20 animate-ping"
+        style={{
+          left: circulo.x - circulo.r * 0.5,
+          top: circulo.y - circulo.r * 0.5,
+          width: circulo.r,
+          height: circulo.r,
+          animationDuration: '2.4s',
+        }}
+      />
+    </>
+  )
+}
+
+function StatusPill({ raioKm }: { raioKm: number | null }) {
   const [msgIndex, setMsgIndex] = useState(0)
 
   useEffect(() => {
@@ -71,19 +135,6 @@ function SweepOverlay({ raioKm }: { raioKm: number | null }) {
 
   return (
     <div className="absolute inset-0 z-[500] flex items-end justify-center pb-4 pointer-events-none">
-      {/* Varredura de radar girando sobre o mapa */}
-      <div
-        className="absolute inset-0 animate-radar-spin"
-        style={{
-          background: 'conic-gradient(from 0deg, transparent 0deg, rgba(34,197,94,0.28) 25deg, transparent 70deg)',
-          maskImage: 'radial-gradient(circle at center, black 60%, transparent 100%)',
-          WebkitMaskImage: 'radial-gradient(circle at center, black 60%, transparent 100%)',
-        }}
-      />
-      {/* Pulsos concêntricos saindo do pino */}
-      <span className="absolute inline-flex h-16 w-16 rounded-full bg-[#22c55e]/20 animate-ping" style={{ animationDuration: '2.4s' }} />
-      <span className="absolute inline-flex h-28 w-28 rounded-full bg-[#22c55e]/10 animate-ping" style={{ animationDuration: '2.4s', animationDelay: '0.6s' }} />
-
       <div className="relative flex items-center gap-2 bg-[#09090b]/85 backdrop-blur-sm border border-[rgba(255,255,255,0.1)] rounded-full pl-2.5 pr-3.5 py-1.5">
         <Satellite size={13} className="text-[#22c55e] shrink-0" />
         <span className="text-xs text-[#e4e4e7] font-mono transition-opacity duration-300">{STATUS_MESSAGES[msgIndex]}</span>
@@ -147,9 +198,10 @@ export function RadarMap({ geo, geoLoading, raioKm, searching }: RadarMapProps) 
           />
         )}
         <Marker position={[geo.lat, geo.lon]} icon={pinIcon} />
+        {searching && <VarreduraNoRaio geo={geo} raioKm={raioKm} />}
       </MapContainer>
 
-      {searching && <SweepOverlay raioKm={raioKm} />}
+      {searching && <StatusPill raioKm={raioKm} />}
 
       <div className="absolute bottom-3 left-3 z-[400] pointer-events-none bg-[#09090b]/70 backdrop-blur-sm border border-[rgba(255,255,255,0.1)] rounded-[8px] px-2.5 py-1">
         <span className="text-[11px] font-mono text-[#71717a] tabular-nums">
