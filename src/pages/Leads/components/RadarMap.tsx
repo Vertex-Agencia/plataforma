@@ -12,6 +12,20 @@ const STATUS_MESSAGES = [
   'Organizando os resultados...',
 ]
 
+// Tema escuro (Stadia Maps, precisa de chave gratuita — client.stadiamaps.com) com fallback
+// automático pro tema claro (CARTO Voyager, sem chave) quando a variável não está configurada,
+// pra nunca quebrar o mapa por falta de credencial.
+const STADIA_API_KEY = import.meta.env.VITE_STADIA_MAPS_API_KEY as string | undefined
+const usaStadia = !!STADIA_API_KEY
+
+const tileUrl = usaStadia
+  ? `https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`
+  : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+
+const tileAttribution = usaStadia
+  ? '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; OpenStreetMap'
+  : '&copy; <a href="https://carto.com/attributions">CARTO</a> &copy; OpenStreetMap'
+
 function zoomParaRaio(raioKm: number | null): number {
   if (!raioKm) return 13
   if (raioKm <= 1) return 15
@@ -182,11 +196,12 @@ export function RadarMap({ geo, geoLoading, raioKm, searching }: RadarMapProps) 
         zoom={zoomParaRaio(raioKm)}
         scrollWheelZoom
         className="vertex-map h-full w-full"
+        style={{ background: usaStadia ? '#15151f' : '#e5e3df' }}
       >
         <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          attribution='&copy; <a href="https://carto.com/attributions">CARTO</a> &copy; OpenStreetMap'
-          subdomains="abcd"
+          url={tileUrl}
+          attribution={tileAttribution}
+          subdomains={usaStadia ? 'a' : 'abcd'}
           maxZoom={19}
         />
         <FlyTo lat={geo.lat} lon={geo.lon} zoom={zoomParaRaio(raioKm)} />

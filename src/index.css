@@ -68,6 +68,19 @@
 }
 
 /* Mapa (Leaflet) — restilizado para o tema escuro da Vertex */
+/* Layout: no mobile a sidebar vira drawer off-canvas (sem reservar espaço); a partir do lg
+   ela é fixa e o conteúdo desloca pra abrir espaço, na largura atual (expandida/recolhida). */
+.content-shift {
+  margin-left: 0;
+  width: 100%;
+}
+@media (min-width: 1024px) {
+  .content-shift {
+    margin-left: var(--sidebar-w);
+    width: calc(100vw - var(--sidebar-w));
+  }
+}
+
 .vertex-map {
   background: #e5e3df;
   font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
