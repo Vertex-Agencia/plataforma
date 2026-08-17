@@ -68,6 +68,8 @@ export function BuscaLeads() {
 
   const [geo, setGeo] = useState<GeoPonto | null>(null)
   const [geoLoading, setGeoLoading] = useState(false)
+  const [geoErro, setGeoErro] = useState<string | null>(null)
+  const [geoTentativa, setGeoTentativa] = useState(0)
 
   // Geocodifica a localização digitada (debounced) só para posicionar o mapa —
   // é independente do raio, que é aplicado como um círculo por cima quando escolhido.
@@ -76,21 +78,25 @@ export function BuscaLeads() {
     const t = setTimeout(async () => {
       const termo = localizacao.trim()
       if (termo.length < 3) {
-        if (ativo) { setGeo(null); setGeoLoading(false) }
+        if (ativo) { setGeo(null); setGeoLoading(false); setGeoErro(null) }
         return
       }
-      if (ativo) setGeoLoading(true)
+      if (ativo) { setGeoLoading(true); setGeoErro(null) }
       try {
         const ponto = await geocodificar(termo)
-        if (ativo) setGeo(ponto)
-      } catch {
-        if (ativo) setGeo(null)
+        if (!ativo) return
+        setGeo(ponto)
+        if (!ponto) setGeoErro('Endereço não encontrado. Tente ser mais específico (bairro, cidade, estado).')
+      } catch (err) {
+        if (!ativo) return
+        setGeo(null)
+        setGeoErro(err instanceof Error ? err.message : 'Erro desconhecido ao localizar o endereço.')
       } finally {
         if (ativo) setGeoLoading(false)
       }
     }, GEOCODE_DEBOUNCE_MS)
     return () => { ativo = false; clearTimeout(t) }
-  }, [localizacao])
+  }, [localizacao, geoTentativa])
 
   const { data: historico, refetch: refetchHistorico } = useQuery<LeadBusca[]>({
     queryKey: ['lead-buscas', user?.id],
@@ -212,6 +218,18 @@ export function BuscaLeads() {
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-[#22c55e]" title="Localização encontrada" />
                 )}
               </div>
+              {geoErro && !geoLoading && (
+                <div className="flex items-center gap-2 text-xs text-[#ef4444] bg-[#ef44441a] border border-[#ef444433] rounded-[8px] px-3 py-2">
+                  <XCircle size={13} className="shrink-0" />
+                  <span className="flex-1">{geoErro}</span>
+                  <button
+                    onClick={() => setGeoTentativa((n) => n + 1)}
+                    className="shrink-0 underline hover:no-underline"
+                  >
+                    Tentar de novo
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col gap-1.5">

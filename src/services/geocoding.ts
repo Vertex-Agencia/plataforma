@@ -11,8 +11,21 @@ export interface GeoPonto {
 
 export async function geocodificar(endereco: string, signal?: AbortSignal): Promise<GeoPonto | null> {
   const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(endereco)}`
-  const response = await fetch(url, { signal })
-  if (!response.ok) return null
+
+  let response: Response
+  try {
+    response = await fetch(url, { signal })
+  } catch (err) {
+    // fetch rejeitado antes de qualquer resposta = bloqueio de rede/CSP/extensão do navegador,
+    // não "endereço não encontrado". Repropaga com uma mensagem que dá pra diagnosticar.
+    console.error('[geocodificar] fetch falhou (rede, CSP ou bloqueador):', err)
+    throw new Error('Não foi possível conectar ao serviço de mapas (rede ou bloqueio do navegador).', { cause: err })
+  }
+
+  if (!response.ok) {
+    console.error('[geocodificar] resposta não-ok do Nominatim:', response.status, response.statusText)
+    throw new Error(`Serviço de mapas respondeu com erro (${response.status}).`)
+  }
 
   const results: { lat: string; lon: string; display_name: string }[] = await response.json()
   const first = results[0]
