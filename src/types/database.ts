@@ -181,6 +181,8 @@ export interface LeadBusca {
   updated_at: string
 }
 
+export type StatusAnaliseLead = 'pendente' | 'concluida' | 'erro' | 'sem_site'
+
 export interface Lead {
   id: number
   user_id: string
@@ -197,6 +199,14 @@ export interface Lead {
   place_id: string | null
   origem: OrigemLead
   observacoes: string | null
+  instagram_url: string | null
+  facebook_url: string | null
+  analise_status: StatusAnaliseLead | null
+  analise_resumo: string | null
+  analise_mensagem: string | null
+  analise_sinais: Record<string, unknown> | null
+  analise_erro: string | null
+  analisado_em: string | null
   created_at: string
   updated_at: string
 }
@@ -205,6 +215,9 @@ export interface Configuracao {
   id: number
   user_id: string
   apify_api_token: string | null
+  openai_api_key: string | null
+  agente_modelo: string | null
+  agente_prompt: string | null
   created_at: string
   updated_at: string
 }
