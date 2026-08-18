@@ -120,6 +120,16 @@ export async function reverterParcelaPendente(parcelaId: number) {
   if (error) throw error
 }
 
+// Ajusta valor e/ou vencimento de uma parcela que ainda não foi paga — sem mexer em status ou
+// nas demais parcelas (diferente de registrarPagamentoParcela, que só roda ao marcar como pago).
+export async function editarParcelaPendente(parcelaId: number, valorParcela: number, dataVencimento: string) {
+  const { error } = await supabase
+    .from('parcelas')
+    .update({ valor_parcela: valorParcela, data_vencimento: dataVencimento })
+    .eq('id', parcelaId)
+  if (error) throw error
+}
+
 export async function registrarPagamentoParcela(
   parcelaId: number,
   valorPago: number,
