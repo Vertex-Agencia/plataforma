@@ -1,13 +1,16 @@
 import { useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Download, Upload, CheckCircle, RotateCcw, Pencil } from 'lucide-react'
+import { ArrowLeft, Download, Upload, CheckCircle, RotateCcw, Pencil, Trash2, Plus, FileEdit } from 'lucide-react'
 import {
   getClienteById,
   getParcelasByCliente,
   registrarPagamentoParcela,
   reverterParcelaPendente,
   editarParcelaPendente,
+  atualizarValorTotalAcordado,
+  adicionarParcelaManual,
+  removerParcelaPendente,
   uploadContrato,
   getManutencaoByCliente,
 } from '../../services/clientes'
@@ -20,8 +23,8 @@ import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { Input } from '../../components/ui/Input'
 import { PageSpinner } from '../../components/ui/Spinner'
-import { formatCurrency, formatDate } from '../../utils/format'
-import type { StatusCliente, TipoServico, StatusParcela, Cliente, Parcela, ManutencaoRecorrente } from '../../types/database'
+import { formatCurrency, formatDate, getErrorMessage } from '../../utils/format'
+import type { StatusCliente, TipoServico, StatusParcela, Cliente, Parcela, ManutencaoRecorrente, OrigemParcela } from '../../types/database'
 
 const statusVariant: Record<StatusCliente, 'green' | 'amber' | 'gray'> = {
   ativo: 'green', aguardando: 'amber', inativo: 'gray',
@@ -53,6 +56,17 @@ export function ClientePerfil() {
   const [vencimentoEditado, setVencimentoEditado] = useState('')
   const [recalcularDemais, setRecalcularDemais] = useState(false)
 
+  // Editar o acordo original: mudar o valor total, adicionar parcela extra (ou pagamento
+  // avulso já quitado) e remover uma parcela pendente do parcelamento.
+  const [editarAcordoAberto, setEditarAcordoAberto] = useState(false)
+  const [novoValorAcordo, setNovoValorAcordo] = useState('')
+  const [recalcularAoMudarValor, setRecalcularAoMudarValor] = useState(true)
+  const [novaParcelaValor, setNovaParcelaValor] = useState('')
+  const [novaParcelaVencimento, setNovaParcelaVencimento] = useState('')
+  const [novaParcelaJaPaga, setNovaParcelaJaPaga] = useState(false)
+  const [novaParcelaDataPagamento, setNovaParcelaDataPagamento] = useState('')
+  const [removendoParcelaId, setRemovendoParcelaId] = useState<number | null>(null)
+
   // Preferência global de ocultar valores (compartilhada com Dashboard e Financeiro via
   // useValoresOcultosStore, alternada pelo olho na barra superior).
   const { ocultos: valoresOcultos } = useValoresOcultosStore()
@@ -81,6 +95,7 @@ export function ClientePerfil() {
 
   function invalidar() {
     queryClient.invalidateQueries({ queryKey: ['parcelas', user?.id, clienteId] })
+    queryClient.invalidateQueries({ queryKey: ['cliente', user?.id, clienteId] })
     queryClient.invalidateQueries({ queryKey: ['dashboard-metrics', user?.id] })
   }
 
@@ -142,6 +157,66 @@ export function ClientePerfil() {
   function valorEditadoValido() {
     const v = parseFloat(valorEditado.replace(',', '.'))
     return !isNaN(v) && v > 0 && !!vencimentoEditado
+  }
+
+  const editarValorAcordoMutation = useMutation({
+    mutationFn: () => {
+      const valor = parseFloat(novoValorAcordo.replace(',', '.'))
+      return atualizarValorTotalAcordado(clienteId, valor, recalcularAoMudarValor, parcelas ?? [])
+    },
+    onSuccess: () => invalidar(),
+  })
+
+  const adicionarParcelaMutation = useMutation({
+    mutationFn: () => {
+      const valor = parseFloat(novaParcelaValor.replace(',', '.'))
+      return adicionarParcelaManual({
+        clienteId,
+        userId: user!.id,
+        origem: (cliente!.tipo_servico === 'implementacao' ? 'implementacao' : 'manutencao') as OrigemParcela,
+        valor,
+        dataVencimento: novaParcelaVencimento,
+        jaPaga: novaParcelaJaPaga,
+        dataPagamento: novaParcelaJaPaga && novaParcelaDataPagamento
+          ? new Date(`${novaParcelaDataPagamento}T12:00:00`).toISOString()
+          : undefined,
+      })
+    },
+    onSuccess: () => {
+      invalidar()
+      setNovaParcelaValor('')
+      setNovaParcelaVencimento('')
+      setNovaParcelaJaPaga(false)
+      setNovaParcelaDataPagamento('')
+    },
+  })
+
+  const removerParcelaMutation = useMutation({
+    mutationFn: (parcelaId: number) => removerParcelaPendente(parcelaId, clienteId),
+    onSuccess: () => {
+      invalidar()
+      setRemovendoParcelaId(null)
+    },
+  })
+
+  function novoValorAcordoValido() {
+    const v = parseFloat(novoValorAcordo.replace(',', '.'))
+    return !isNaN(v) && v > 0
+  }
+
+  function novaParcelaValida() {
+    const v = parseFloat(novaParcelaValor.replace(',', '.'))
+    return !isNaN(v) && v > 0 && !!novaParcelaVencimento
+  }
+
+  function abrirEditarAcordo() {
+    setNovoValorAcordo(Number(cliente?.valor_total_acordado ?? 0).toFixed(2).replace('.', ','))
+    setRecalcularAoMudarValor(true)
+    setNovaParcelaValor('')
+    setNovaParcelaVencimento('')
+    setNovaParcelaJaPaga(false)
+    setNovaParcelaDataPagamento(new Date().toISOString().split('T')[0])
+    setEditarAcordoAberto(true)
   }
 
   const uploadMutation = useMutation({
@@ -214,9 +289,18 @@ export function ClientePerfil() {
             </div>
             {cliente.observacao && <p className="mt-2 text-sm text-[#a1a1aa]">{cliente.observacao}</p>}
           </div>
-          <div className="text-right shrink-0">
-            <p className="text-2xl font-semibold text-[#fafafa]">{exibir(Number(cliente.valor_total_acordado))}</p>
-            <p className="text-xs text-[#a1a1aa]">valor total</p>
+          <div className="text-right shrink-0 flex items-start gap-2">
+            <div>
+              <p className="text-2xl font-semibold text-[#fafafa]">{exibir(Number(cliente.valor_total_acordado))}</p>
+              <p className="text-xs text-[#a1a1aa]">valor total</p>
+            </div>
+            <button
+              onClick={abrirEditarAcordo}
+              title="Editar acordo"
+              className="p-1.5 rounded-[8px] text-[#71717a] hover:text-[#fafafa] hover:bg-[#18181b] transition-colors shrink-0"
+            >
+              <FileEdit size={16} />
+            </button>
           </div>
         </div>
 
@@ -256,6 +340,13 @@ export function ClientePerfil() {
                 <Badge variant={parcelaVariant[p.status]}>{p.status}</Badge>
                 {p.status === 'pendente' ? (
                   <>
+                    <button
+                      title="Remover parcela"
+                      onClick={() => setRemovendoParcelaId(p.id)}
+                      className="p-1.5 rounded-[6px] text-[#52525b] hover:text-[#ef4444] hover:bg-[#ef44441a] transition-colors"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                     <button
                       title="Editar valor/vencimento"
                       onClick={() => abrirModalEdicao(p)}
@@ -485,6 +576,137 @@ export function ClientePerfil() {
               </div>
             )
           })()}
+        </div>
+      </Modal>
+
+      {/* Modal: confirmar remoção de parcela pendente */}
+      <Modal
+        open={removendoParcelaId !== null}
+        onClose={() => setRemovendoParcelaId(null)}
+        title="Remover parcela"
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => setRemovendoParcelaId(null)}>Cancelar</Button>
+            <Button
+              variant="danger"
+              loading={removerParcelaMutation.isPending}
+              onClick={() => removerParcelaMutation.mutate(removendoParcelaId!)}
+            >
+              <Trash2 size={14} /> Remover
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-[#a1a1aa]">
+          Tem certeza que deseja remover esta parcela pendente? As demais serão renumeradas e o total de parcelas do contrato será ajustado. Essa ação não pode ser desfeita.
+        </p>
+        {removerParcelaMutation.isError && (
+          <p className="text-xs text-[#ef4444] mt-3">{getErrorMessage(removerParcelaMutation.error, 'Erro ao remover parcela.')}</p>
+        )}
+      </Modal>
+
+      {/* Modal: editar acordo original */}
+      <Modal
+        open={editarAcordoAberto}
+        onClose={() => setEditarAcordoAberto(false)}
+        title="Editar acordo"
+        size="lg"
+      >
+        <div className="flex flex-col gap-6">
+          {/* Valor total */}
+          <div className="flex flex-col gap-3">
+            <p className="text-sm font-semibold text-[#fafafa]">Valor total do contrato</p>
+            <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
+              <Input
+                label="Novo valor (R$)"
+                value={novoValorAcordo}
+                onChange={(e) => setNovoValorAcordo(e.target.value)}
+                placeholder="0,00"
+              />
+              <Button
+                variant="accent"
+                loading={editarValorAcordoMutation.isPending}
+                disabled={!novoValorAcordoValido()}
+                onClick={() => editarValorAcordoMutation.mutate()}
+              >
+                Salvar valor
+              </Button>
+            </div>
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={recalcularAoMudarValor}
+                onChange={(e) => setRecalcularAoMudarValor(e.target.checked)}
+                className="shrink-0 accent-[#22c55e]"
+              />
+              <span className="text-xs text-[#a1a1aa]">
+                Redistribuir a diferença entre as parcelas pendentes (mantém o que já foi pago)
+              </span>
+            </label>
+            {editarValorAcordoMutation.isError && (
+              <p className="text-xs text-[#ef4444]">{getErrorMessage(editarValorAcordoMutation.error, 'Erro ao atualizar valor do contrato.')}</p>
+            )}
+            {editarValorAcordoMutation.isSuccess && (
+              <p className="text-xs text-[#22c55e]">Valor total atualizado.</p>
+            )}
+          </div>
+
+          <div className="border-t border-[rgba(255,255,255,0.07)] pt-5 flex flex-col gap-3">
+            <p className="text-sm font-semibold text-[#fafafa]">Adicionar parcela / pagamento avulso</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Valor (R$)"
+                value={novaParcelaValor}
+                onChange={(e) => setNovaParcelaValor(e.target.value)}
+                placeholder="0,00"
+              />
+              <Input
+                label={novaParcelaJaPaga ? 'Data de referência' : 'Vencimento'}
+                type="date"
+                value={novaParcelaVencimento}
+                onChange={(e) => setNovaParcelaVencimento(e.target.value)}
+              />
+            </div>
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={novaParcelaJaPaga}
+                onChange={(e) => setNovaParcelaJaPaga(e.target.checked)}
+                className="shrink-0 accent-[#22c55e]"
+              />
+              <span className="text-sm text-[#fafafa]">Já foi paga (pagamento avulso)</span>
+            </label>
+            {novaParcelaJaPaga && (
+              <Input
+                label="Data do pagamento"
+                type="date"
+                value={novaParcelaDataPagamento}
+                onChange={(e) => setNovaParcelaDataPagamento(e.target.value)}
+              />
+            )}
+            <Button
+              variant="default"
+              className="w-fit"
+              loading={adicionarParcelaMutation.isPending}
+              disabled={!novaParcelaValida()}
+              onClick={() => adicionarParcelaMutation.mutate()}
+            >
+              <Plus size={14} /> Adicionar
+            </Button>
+            <p className="text-xs text-[#71717a]">
+              Não muda o valor total do contrato — só acrescenta mais uma parcela ao parcelamento (pendente ou já paga, se for um pagamento avulso).
+            </p>
+            {adicionarParcelaMutation.isError && (
+              <p className="text-xs text-[#ef4444]">{getErrorMessage(adicionarParcelaMutation.error, 'Erro ao adicionar parcela.')}</p>
+            )}
+            {adicionarParcelaMutation.isSuccess && (
+              <p className="text-xs text-[#22c55e]">Parcela adicionada.</p>
+            )}
+          </div>
+
+          <p className="text-xs text-[#52525b]">
+            Pra remover uma parcela pendente, use o ícone de lixeira na lista de parcelas.
+          </p>
         </div>
       </Modal>
     </div>

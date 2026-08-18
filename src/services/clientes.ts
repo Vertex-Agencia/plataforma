@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase'
-import type { Cliente, Parcela, ManutencaoRecorrente } from '../types/database'
+import type { Cliente, Parcela, ManutencaoRecorrente, OrigemParcela } from '../types/database'
 
 export async function getClientes(userId: string): Promise<Cliente[]> {
   const { data, error } = await supabase
@@ -193,6 +193,109 @@ export async function registrarPagamentoParcela(
         .from('parcelas')
         .update({ valor_parcela: i === 0 ? base + ajuste : base })
         .eq('id', p.id)
+    )
+  )
+}
+
+// Edita o valor total acordado do contrato. Se recalcularPendentes vier true, redistribui
+// (valorTotalAcordado - já pago) igualmente entre as parcelas ainda pendentes.
+export async function atualizarValorTotalAcordado(
+  clienteId: number,
+  novoValor: number,
+  recalcularPendentes?: boolean,
+  todasParcelas?: Parcela[]
+) {
+  const { error } = await supabase.from('clientes').update({ valor_total_acordado: novoValor }).eq('id', clienteId)
+  if (error) throw error
+
+  if (!recalcularPendentes || !todasParcelas) return
+
+  const totalPago = todasParcelas.filter((p) => p.status === 'pago').reduce((s, p) => s + Number(p.valor_parcela), 0)
+  const pendentes = todasParcelas.filter((p) => p.status === 'pendente')
+  const saldoRestante = novoValor - totalPago
+
+  if (pendentes.length === 0 || saldoRestante <= 0) return
+
+  const base = Math.floor((saldoRestante / pendentes.length) * 100) / 100
+  const ajuste = Math.round((saldoRestante - base * pendentes.length) * 100) / 100
+
+  await Promise.all(
+    pendentes.map((p, i) =>
+      supabase
+        .from('parcelas')
+        .update({ valor_parcela: i === 0 ? base + ajuste : base })
+        .eq('id', p.id)
+    )
+  )
+}
+
+interface NovaParcelaInput {
+  clienteId: number
+  userId: string
+  origem: OrigemParcela
+  valor: number
+  dataVencimento: string
+  jaPaga: boolean
+  dataPagamento?: string
+}
+
+// Adiciona uma parcela extra fora do parcelamento original — serve tanto pra estender o
+// contrato (nova parcela pendente) quanto pra registrar um pagamento avulso (já paga, com data).
+export async function adicionarParcelaManual(input: NovaParcelaInput) {
+  const { data: existentes, error: fetchError } = await supabase
+    .from('parcelas')
+    .select('numero_parcela')
+    .eq('cliente_id', input.clienteId)
+  if (fetchError) throw fetchError
+
+  const quantidadeAtual = existentes?.length ?? 0
+  const proximoNumero = quantidadeAtual > 0 ? Math.max(...existentes!.map((p) => p.numero_parcela)) + 1 : 1
+  const novoTotal = quantidadeAtual + 1
+
+  const { error: insertError } = await supabase.from('parcelas').insert({
+    user_id: input.userId,
+    cliente_id: input.clienteId,
+    manutencao_recorrente_id: null,
+    origem: input.origem,
+    numero_parcela: proximoNumero,
+    total_parcelas: novoTotal,
+    valor_parcela: input.valor,
+    data_vencimento: input.dataVencimento,
+    status: input.jaPaga ? 'pago' : 'pendente',
+    data_pagamento: input.jaPaga ? (input.dataPagamento ?? new Date().toISOString()) : null,
+  })
+  if (insertError) throw insertError
+
+  const { error: updateError } = await supabase
+    .from('parcelas')
+    .update({ total_parcelas: novoTotal })
+    .eq('cliente_id', input.clienteId)
+  if (updateError) throw updateError
+}
+
+// Remove uma parcela pendente (nunca uma já paga, pra não perder histórico) e renumera as
+// restantes sequencialmente, ajustando o total_parcelas de todo mundo.
+export async function removerParcelaPendente(parcelaId: number, clienteId: number) {
+  const { error: deleteError } = await supabase
+    .from('parcelas')
+    .delete()
+    .eq('id', parcelaId)
+    .eq('status', 'pendente')
+  if (deleteError) throw deleteError
+
+  const { data: restantes, error: fetchError } = await supabase
+    .from('parcelas')
+    .select('id')
+    .eq('cliente_id', clienteId)
+    .order('numero_parcela', { ascending: true })
+  if (fetchError) throw fetchError
+
+  const novoTotal = restantes?.length ?? 0
+  if (novoTotal === 0) return
+
+  await Promise.all(
+    (restantes ?? []).map((p, i) =>
+      supabase.from('parcelas').update({ numero_parcela: i + 1, total_parcelas: novoTotal }).eq('id', p.id)
     )
   )
 }
