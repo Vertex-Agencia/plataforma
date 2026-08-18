@@ -6,16 +6,21 @@ import {
 } from 'recharts'
 import { TrendingUp, Users, Clock, AlertTriangle, CheckCircle } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
+import { useValoresOcultosStore } from '../../store/valoresOcultosStore'
 import { getDashboardMetrics, getChartData } from '../../services/dashboard'
-import { marcarParcelaPaga } from '../../services/clientes'
+import { getClienteById, getParcelasByCliente, registrarPagamentoParcela } from '../../services/clientes'
 import { supabase } from '../../lib/supabase'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
 import { Avatar } from '../../components/ui/Avatar'
+import { Button } from '../../components/ui/Button'
+import { Modal } from '../../components/ui/Modal'
+import { Input } from '../../components/ui/Input'
 import { PageSpinner } from '../../components/ui/Spinner'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { formatCurrency, formatDate } from '../../utils/format'
+import { formatCurrency, formatDate, getErrorMessage } from '../../utils/format'
 import type { ElementType } from 'react'
+import type { ParcelaComCliente } from '../../services/dashboard'
 
 type Period = '1m' | '6m' | '12m' | 'all'
 
@@ -59,20 +64,44 @@ export function Dashboard() {
   const { user } = useAuthStore()
   const queryClient = useQueryClient()
   const [period, setPeriod] = useState<Period>('1m')
-  const [pagandoId, setPagandoId] = useState<number | null>(null)
+  const { ocultos } = useValoresOcultosStore()
+
+  function exibir(valor: number): string {
+    return ocultos ? '••••••' : formatCurrency(valor)
+  }
+
+  // Registrar pagamento direto pelo Dashboard: o valor recebido é editável (pode diferir da
+  // parcela original) e as parcelas pendentes restantes do mesmo cliente são recalculadas com
+  // base no valor total acordado — mesma lógica usada no perfil do cliente.
+  const [pagandoParcela, setPagandoParcela] = useState<ParcelaComCliente | null>(null)
+  const [valorDigitado, setValorDigitado] = useState('')
 
   const pagarParcelaMutation = useMutation({
-    mutationFn: (parcelaId: number) => {
-      setPagandoId(parcelaId)
-      return marcarParcelaPaga(parcelaId)
+    mutationFn: async () => {
+      const valor = parseFloat(valorDigitado.replace(',', '.'))
+      const [cliente, todasParcelas] = await Promise.all([
+        getClienteById(pagandoParcela!.cliente_id),
+        getParcelasByCliente(pagandoParcela!.cliente_id),
+      ])
+      return registrarPagamentoParcela(pagandoParcela!.id, valor, todasParcelas, Number(cliente.valor_total_acordado))
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-metrics', user?.id] })
       queryClient.invalidateQueries({ queryKey: ['parcelas-pagas', user?.id] })
-      setPagandoId(null)
+      setPagandoParcela(null)
+      setValorDigitado('')
     },
-    onError: () => setPagandoId(null),
   })
+
+  function abrirModalPagamento(p: ParcelaComCliente) {
+    setPagandoParcela(p)
+    setValorDigitado(Number(p.valor_parcela).toFixed(2).replace('.', ','))
+  }
+
+  function valorValido() {
+    const v = parseFloat(valorDigitado.replace(',', '.'))
+    return !isNaN(v) && v > 0
+  }
 
   const { start, end } = getPeriodDates(period)
 
@@ -132,7 +161,8 @@ export function Dashboard() {
   })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tooltipFormatter = (value: any) => formatCurrency(Number(value))
+  const tooltipFormatter = (value: any) => exibir(Number(value))
+  const axisFormatter = (v: number) => (ocultos ? '•••' : `R$${(Number(v) / 1000).toFixed(0)}k`)
 
   return (
     <div className="flex flex-col gap-6">
@@ -153,8 +183,8 @@ export function Dashboard() {
 
       {/* Metric cards */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        <MetricCard title="Receita" value={formatCurrency(metrics?.receita ?? 0)} icon={TrendingUp} accentColor="#22c55e" />
-        <MetricCard title="Lucro Líquido" value={formatCurrency(metrics?.lucro ?? 0)} icon={TrendingUp} accentColor="#3b82f6" />
+        <MetricCard title="Receita" value={exibir(metrics?.receita ?? 0)} icon={TrendingUp} accentColor="#22c55e" />
+        <MetricCard title="Lucro Líquido" value={exibir(metrics?.lucro ?? 0)} icon={TrendingUp} accentColor="#3b82f6" />
         <MetricCard title="Clientes Ativos" value={String(metrics?.clientesAtivos ?? 0)} icon={Users} accentColor="#a78bfa" />
         <MetricCard title="Aguardando Pagamento" value={String(metrics?.parcelas_pendentes?.length ?? 0)} icon={Clock} accentColor="#f59e0b" />
       </div>
@@ -163,7 +193,7 @@ export function Dashboard() {
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
           <p className="font-display text-sm font-medium text-[#fafafa]">Meta MRR</p>
-          <span className="font-mono text-sm text-[#a1a1aa] tabular-nums">{formatCurrency(mrrAtual)} / {formatCurrency(MRR_META)}</span>
+          <span className="font-mono text-sm text-[#a1a1aa] tabular-nums">{exibir(mrrAtual)} / {exibir(MRR_META)}</span>
         </div>
         <div className="h-2 bg-[#27272a] rounded-full overflow-hidden">
           <div className="h-full bg-[#22c55e] rounded-full transition-all duration-500" style={{ width: `${mrrProgress}%` }} />
@@ -179,7 +209,7 @@ export function Dashboard() {
             <LineChart data={chartData ?? []}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
               <XAxis dataKey="mes" tick={{ fill: '#a1a1aa', fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#a1a1aa', fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `R$${(Number(v) / 1000).toFixed(0)}k`} />
+              <YAxis tick={{ fill: '#a1a1aa', fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={axisFormatter} />
               <Tooltip
                 contentStyle={{ backgroundColor: '#18181b', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '8px', color: '#fafafa' }}
                 formatter={tooltipFormatter}
@@ -229,14 +259,13 @@ export function Dashboard() {
                       <p className="font-mono text-xs text-[#a1a1aa] tabular-nums">{p.numero_parcela}/{p.total_parcelas} · Vence {formatDate(p.data_vencimento)}</p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="font-mono text-sm font-medium text-[#fafafa] tabular-nums">{formatCurrency(Number(p.valor_parcela))}</p>
+                      <p className="font-mono text-sm font-medium text-[#fafafa] tabular-nums">{exibir(Number(p.valor_parcela))}</p>
                       <Badge variant={atrasado ? 'red' : 'amber'}>{atrasado ? 'Atrasado' : 'Pendente'}</Badge>
                     </div>
                     <button
-                      title="Marcar como pago"
-                      disabled={pagarParcelaMutation.isPending && pagandoId === p.id}
-                      onClick={() => pagarParcelaMutation.mutate(p.id)}
-                      className="p-1.5 rounded-[6px] text-[#52525b] hover:text-[#22c55e] hover:bg-[#22c55e1a] transition-colors shrink-0 disabled:opacity-40"
+                      title="Registrar pagamento"
+                      onClick={() => abrirModalPagamento(p)}
+                      className="p-1.5 rounded-[6px] text-[#52525b] hover:text-[#22c55e] hover:bg-[#22c55e1a] transition-colors shrink-0"
                     >
                       <CheckCircle size={16} />
                     </button>
@@ -281,6 +310,50 @@ export function Dashboard() {
           )}
         </Card>
       </div>
+
+      {/* Modal: registrar pagamento */}
+      <Modal
+        open={!!pagandoParcela}
+        onClose={() => { setPagandoParcela(null); setValorDigitado('') }}
+        title={`Parcela ${pagandoParcela?.numero_parcela} — Registrar pagamento`}
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => { setPagandoParcela(null); setValorDigitado('') }}>Cancelar</Button>
+            <Button
+              variant="accent"
+              loading={pagarParcelaMutation.isPending}
+              onClick={() => pagarParcelaMutation.mutate()}
+              disabled={!valorValido()}
+            >
+              <CheckCircle size={14} /> Confirmar
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex justify-between text-sm">
+            <span className="text-[#a1a1aa]">Cliente</span>
+            <span className="text-[#fafafa] font-medium">{pagandoParcela?.clientes?.nome_razao_social ?? 'Cliente'}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-[#a1a1aa]">Valor da parcela</span>
+            <span className="text-[#fafafa] font-medium">{exibir(Number(pagandoParcela?.valor_parcela ?? 0))}</span>
+          </div>
+          <Input
+            label="Valor recebido (R$)"
+            value={valorDigitado}
+            onChange={(e) => setValorDigitado(e.target.value)}
+            placeholder="0,00"
+            autoFocus
+          />
+          <p className="text-xs text-[#71717a]">
+            Se o valor recebido for diferente do previsto, as demais parcelas pendentes desse cliente serão recalculadas automaticamente com base no valor total acordado.
+          </p>
+          {pagarParcelaMutation.isError && (
+            <p className="text-xs text-[#ef4444]">{getErrorMessage(pagarParcelaMutation.error, 'Erro ao registrar pagamento.')}</p>
+          )}
+        </div>
+      </Modal>
     </div>
   )
 }

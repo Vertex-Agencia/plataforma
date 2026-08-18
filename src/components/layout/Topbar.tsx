@@ -1,6 +1,7 @@
 import { useLocation } from 'react-router-dom'
-import { Menu } from 'lucide-react'
+import { Menu, Eye, EyeOff } from 'lucide-react'
 import { formatDate } from '../../utils/format'
+import { useValoresOcultosStore } from '../../store/valoresOcultosStore'
 
 const titles: Record<string, string> = {
   '/': 'Dashboard',
@@ -28,6 +29,7 @@ export function Topbar({ onOpenMobile }: TopbarProps) {
   const { pathname } = useLocation()
   const title = getTitle(pathname)
   const today = formatDate(new Date().toISOString().split('T')[0])
+  const { ocultos, alternar } = useValoresOcultosStore()
 
   return (
     <header className="h-14 flex items-center justify-between gap-3 px-4 lg:px-6 border-b border-[rgba(255,255,255,0.07)] bg-[#09090b]/80 backdrop-blur-sm sticky top-0 z-30">
@@ -41,7 +43,16 @@ export function Topbar({ onOpenMobile }: TopbarProps) {
         </button>
         <h1 className="font-display text-base font-semibold text-[#fafafa] tracking-tight truncate">{title}</h1>
       </div>
-      <span className="font-mono text-xs text-[#a1a1aa] tabular-nums shrink-0">{today}</span>
+      <div className="flex items-center gap-3 shrink-0">
+        <button
+          onClick={alternar}
+          title={ocultos ? 'Mostrar valores' : 'Ocultar valores'}
+          className="p-1.5 rounded-[8px] text-[#a1a1aa] hover:text-[#fafafa] hover:bg-[#18181b] transition-colors"
+        >
+          {ocultos ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+        <span className="font-mono text-xs text-[#a1a1aa] tabular-nums hidden sm:inline">{today}</span>
+      </div>
     </header>
   )
 }

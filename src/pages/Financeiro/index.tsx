@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, TrendingUp, TrendingDown, ToggleLeft, ToggleRight, Users, Pencil, Trash2, RotateCcw } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
+import { useValoresOcultosStore } from '../../store/valoresOcultosStore'
 import { supabase } from '../../lib/supabase'
 import {
   getEntradas, createEntrada, updateEntrada, deleteEntrada,
@@ -27,6 +28,10 @@ type FiltroLancamento = 'all' | 'entrada' | 'saida' | 'parcela'
 export function Financeiro() {
   const { user } = useAuthStore()
   const queryClient = useQueryClient()
+  const { ocultos } = useValoresOcultosStore()
+  function exibir(valor: number): string {
+    return ocultos ? '••••••' : formatCurrency(valor)
+  }
   const [tab, setTab] = useState<Tab>('lancamentos')
   const [modalOpen, setModalOpen] = useState(false)
   const [despesaModalOpen, setDespesaModalOpen] = useState(false)
@@ -138,20 +143,20 @@ export function Financeiro() {
       <div className="grid grid-cols-3 gap-4">
         <Card accentColor="#22c55e" className="p-5">
           <p className="text-xs text-[#a1a1aa] uppercase tracking-wider">Receita Total</p>
-          <p className="text-2xl font-semibold text-[#fafafa] mt-1.5">{formatCurrency(receita)}</p>
+          <p className="text-2xl font-semibold text-[#fafafa] mt-1.5">{exibir(receita)}</p>
           <div className="mt-2 flex flex-col gap-0.5">
-            <p className="text-[11px] text-[#71717a]">Parcelas recebidas: <span className="text-[#a1a1aa]">{formatCurrency(receitaParcelas)}</span></p>
-            <p className="text-[11px] text-[#71717a]">Lançamentos manuais: <span className="text-[#a1a1aa]">{formatCurrency(receitaManual)}</span></p>
+            <p className="text-[11px] text-[#71717a]">Parcelas recebidas: <span className="text-[#a1a1aa]">{exibir(receitaParcelas)}</span></p>
+            <p className="text-[11px] text-[#71717a]">Lançamentos manuais: <span className="text-[#a1a1aa]">{exibir(receitaManual)}</span></p>
           </div>
         </Card>
         <Card accentColor="#ef4444" className="p-5">
           <p className="text-xs text-[#a1a1aa] uppercase tracking-wider">Despesas</p>
-          <p className="text-2xl font-semibold text-[#fafafa] mt-1.5">{formatCurrency(despesasTotal)}</p>
+          <p className="text-2xl font-semibold text-[#fafafa] mt-1.5">{exibir(despesasTotal)}</p>
         </Card>
         <Card accentColor="#3b82f6" className="p-5">
           <p className="text-xs text-[#a1a1aa] uppercase tracking-wider">Lucro Líquido</p>
           <p className={`text-2xl font-semibold mt-1.5 ${receita - despesasTotal >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
-            {formatCurrency(receita - despesasTotal)}
+            {exibir(receita - despesasTotal)}
           </p>
         </Card>
       </div>
@@ -219,7 +224,7 @@ export function Financeiro() {
                         </Td>
                         <Td>{formatDate(p.data_pagamento)}</Td>
                         <Td><Badge variant="gray">—</Badge></Td>
-                        <Td className="font-medium text-[#22c55e]">+{formatCurrency(p.valor_parcela)}</Td>
+                        <Td className="font-medium text-[#22c55e]">+{exibir(p.valor_parcela)}</Td>
                         <Td>
                           <button
                             title="Reverter para pendente"
@@ -246,7 +251,7 @@ export function Financeiro() {
                       <Td>{formatDate(e.data_transacao)}</Td>
                       <Td>{e.emitido_nota_fiscal ? <Badge variant="green">Sim</Badge> : <Badge variant="gray">Não</Badge>}</Td>
                       <Td className={`font-medium ${e.tipo === 'entrada' ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
-                        {e.tipo === 'entrada' ? '+' : '-'}{formatCurrency(Number(e.valor))}
+                        {e.tipo === 'entrada' ? '+' : '-'}{exibir(Number(e.valor))}
                       </Td>
                       <Td>
                         <div className="flex items-center gap-1">
@@ -286,7 +291,7 @@ export function Financeiro() {
                 {(despesas ?? []).map((d) => (
                   <Tr key={d.id}>
                     <Td>{d.nome}</Td>
-                    <Td className="font-medium">{formatCurrency(Number(d.valor))}</Td>
+                    <Td className="font-medium">{exibir(Number(d.valor))}</Td>
                     <Td className="capitalize">{d.periodicidade}</Td>
                     <Td>{formatDate(d.data_inicio)}</Td>
                     <Td><Badge variant={d.ativo ? 'green' : 'gray'}>{d.ativo ? 'Ativa' : 'Pausada'}</Badge></Td>
