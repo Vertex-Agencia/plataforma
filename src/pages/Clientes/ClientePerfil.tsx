@@ -51,6 +51,7 @@ export function ClientePerfil() {
   const [editandoParcela, setEditandoParcela] = useState<Parcela | null>(null)
   const [valorEditado, setValorEditado] = useState('')
   const [vencimentoEditado, setVencimentoEditado] = useState('')
+  const [recalcularDemais, setRecalcularDemais] = useState(false)
 
   // Preferência global de ocultar valores (compartilhada com Dashboard e Financeiro via
   // useValoresOcultosStore, alternada pelo olho na barra superior).
@@ -113,13 +114,21 @@ export function ClientePerfil() {
   const editarParcelaMutation = useMutation({
     mutationFn: () => {
       const valor = parseFloat(valorEditado.replace(',', '.'))
-      return editarParcelaPendente(editandoParcela!.id, valor, vencimentoEditado)
+      return editarParcelaPendente(
+        editandoParcela!.id,
+        valor,
+        vencimentoEditado,
+        recalcularDemais,
+        parcelas ?? [],
+        Number(cliente!.valor_total_acordado)
+      )
     },
     onSuccess: () => {
       invalidar()
       setEditandoParcela(null)
       setValorEditado('')
       setVencimentoEditado('')
+      setRecalcularDemais(false)
     },
   })
 
@@ -127,6 +136,7 @@ export function ClientePerfil() {
     setEditandoParcela(parcela)
     setValorEditado(Number(parcela.valor_parcela).toFixed(2).replace('.', ','))
     setVencimentoEditado(parcela.data_vencimento.split('T')[0])
+    setRecalcularDemais(false)
   }
 
   function valorEditadoValido() {
@@ -405,11 +415,11 @@ export function ClientePerfil() {
       {/* Modal: editar parcela pendente (sem marcar como paga) */}
       <Modal
         open={!!editandoParcela}
-        onClose={() => { setEditandoParcela(null); setValorEditado(''); setVencimentoEditado('') }}
+        onClose={() => { setEditandoParcela(null); setValorEditado(''); setVencimentoEditado(''); setRecalcularDemais(false) }}
         title={`Parcela ${editandoParcela?.numero_parcela} — Editar`}
         actions={
           <>
-            <Button variant="ghost" onClick={() => { setEditandoParcela(null); setValorEditado(''); setVencimentoEditado('') }}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => { setEditandoParcela(null); setValorEditado(''); setVencimentoEditado(''); setRecalcularDemais(false) }}>Cancelar</Button>
             <Button
               variant="accent"
               loading={editarParcelaMutation.isPending}
@@ -438,8 +448,43 @@ export function ClientePerfil() {
             />
           </div>
           <p className="text-xs text-[#71717a]">
-            A parcela continua pendente — isso só ajusta o valor e/ou a data de vencimento previstos, sem afetar as demais parcelas.
+            A parcela continua pendente — isso só ajusta o valor e a data de vencimento dela.
           </p>
+
+          {(() => {
+            const outrasPendentes = (parcelas ?? []).filter((p) => p.status === 'pendente' && p.id !== editandoParcela?.id)
+            const valorEditadoNum = parseFloat(valorEditado.replace(',', '.'))
+            const valorValidoLocal = !isNaN(valorEditadoNum) && valorEditadoNum > 0
+            const saldoRestante = Number(cliente?.valor_total_acordado ?? 0) - totalPago - (valorValidoLocal ? valorEditadoNum : 0)
+            const valorPorParcela = outrasPendentes.length > 0 ? saldoRestante / outrasPendentes.length : 0
+
+            if (outrasPendentes.length === 0) return null
+
+            return (
+              <div className="rounded-[8px] bg-[#18181b] border border-[rgba(255,255,255,0.07)] p-3">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={recalcularDemais}
+                    onChange={(e) => setRecalcularDemais(e.target.checked)}
+                    className="mt-0.5 shrink-0 accent-[#22c55e]"
+                  />
+                  <span className="text-sm text-[#fafafa]">
+                    Ajustar as demais parcelas pendentes com base no valor total do contrato
+                  </span>
+                </label>
+                {recalcularDemais && valorValidoLocal && (
+                  <p className="text-xs text-[#a1a1aa] mt-2 pl-6">
+                    Já pago: <span className="text-[#22c55e]">{formatCurrency(totalPago)}</span> · Restante após esta parcela: <span className="text-[#fafafa]">{formatCurrency(Math.max(saldoRestante, 0))}</span> ÷ {outrasPendentes.length} parcela{outrasPendentes.length > 1 ? 's' : ''} ={' '}
+                    <span className="text-[#fafafa] font-medium">{formatCurrency(Math.max(valorPorParcela, 0))}</span> cada.
+                    {saldoRestante < 0 && (
+                      <span className="block text-[#ef4444] mt-1">O valor informado já ultrapassa o total do contrato — as demais não serão reduzidas abaixo de zero.</span>
+                    )}
+                  </p>
+                )}
+              </div>
+            )
+          })()}
         </div>
       </Modal>
     </div>

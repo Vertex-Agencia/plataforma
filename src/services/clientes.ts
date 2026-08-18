@@ -120,14 +120,45 @@ export async function reverterParcelaPendente(parcelaId: number) {
   if (error) throw error
 }
 
-// Ajusta valor e/ou vencimento de uma parcela que ainda não foi paga — sem mexer em status ou
-// nas demais parcelas (diferente de registrarPagamentoParcela, que só roda ao marcar como pago).
-export async function editarParcelaPendente(parcelaId: number, valorParcela: number, dataVencimento: string) {
+// Ajusta valor e/ou vencimento de uma parcela que ainda não foi paga — sem mexer em status.
+// Se recalcularDemais vier true, redistribui o saldo restante (valor total acordado menos o já
+// pago menos o novo valor desta parcela) entre as demais parcelas pendentes do cliente.
+export async function editarParcelaPendente(
+  parcelaId: number,
+  valorParcela: number,
+  dataVencimento: string,
+  recalcularDemais?: boolean,
+  todasParcelas?: Parcela[],
+  valorTotalAcordado?: number
+) {
   const { error } = await supabase
     .from('parcelas')
     .update({ valor_parcela: valorParcela, data_vencimento: dataVencimento })
     .eq('id', parcelaId)
   if (error) throw error
+
+  if (!recalcularDemais || !todasParcelas || valorTotalAcordado == null) return
+
+  const totalPago = todasParcelas
+    .filter((p) => p.status === 'pago')
+    .reduce((s, p) => s + Number(p.valor_parcela), 0)
+
+  const saldoRestante = valorTotalAcordado - totalPago - valorParcela
+  const outrasPendentes = todasParcelas.filter((p) => p.status === 'pendente' && p.id !== parcelaId)
+
+  if (outrasPendentes.length === 0 || saldoRestante <= 0) return
+
+  const base = Math.floor((saldoRestante / outrasPendentes.length) * 100) / 100
+  const ajuste = Math.round((saldoRestante - base * outrasPendentes.length) * 100) / 100
+
+  await Promise.all(
+    outrasPendentes.map((p, i) =>
+      supabase
+        .from('parcelas')
+        .update({ valor_parcela: i === 0 ? base + ajuste : base })
+        .eq('id', p.id)
+    )
+  )
 }
 
 export async function registrarPagamentoParcela(
