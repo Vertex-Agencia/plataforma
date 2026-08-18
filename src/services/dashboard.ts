@@ -3,8 +3,9 @@ import { supabase } from '../lib/supabase'
 interface ParcelaRow { valor_parcela: number; data_pagamento: string | null; origem: string }
 interface DespesaRow { valor: number }
 interface ManutencaoRow { id: number; data_vencimento_atual: string; clientes: { nome_razao_social: string } | null }
-interface ParcelaComCliente {
+export interface ParcelaComCliente {
   id: number
+  cliente_id: number
   numero_parcela: number
   total_parcelas: number
   valor_parcela: number
@@ -25,7 +26,7 @@ export async function getDashboardMetrics(userId: string, startDate?: string, en
     supabase.from('parcelas').select('valor_parcela, data_pagamento, origem').eq('user_id', userId).eq('status', 'pago').gte('data_pagamento', start).lte('data_pagamento', end + 'T23:59:59'),
     supabase.from('entradas_saidas').select('valor').eq('user_id', userId).eq('tipo', 'saida').gte('data_transacao', start).lte('data_transacao', end),
     supabase.from('clientes').select('id').eq('user_id', userId).eq('status', 'ativo'),
-    supabase.from('parcelas').select('id, numero_parcela, total_parcelas, valor_parcela, data_vencimento, status, clientes(nome_razao_social)').eq('user_id', userId).eq('status', 'pendente').gte('data_vencimento', proximoMesInicio).lte('data_vencimento', proximoMesFim).order('data_vencimento', { ascending: true }),
+    supabase.from('parcelas').select('id, cliente_id, numero_parcela, total_parcelas, valor_parcela, data_vencimento, status, clientes(nome_razao_social)').eq('user_id', userId).eq('status', 'pendente').gte('data_vencimento', proximoMesInicio).lte('data_vencimento', proximoMesFim).order('data_vencimento', { ascending: true }),
     supabase.from('manutencao_recorrente').select('id, data_vencimento_atual, clientes(nome_razao_social)').eq('user_id', userId).eq('status', 'ativo'),
   ])
 

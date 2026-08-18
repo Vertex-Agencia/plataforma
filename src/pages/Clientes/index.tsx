@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search, LayoutList, LayoutGrid, Trash2, AlertTriangle } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
+import { useValoresOcultosStore } from '../../store/valoresOcultosStore'
 import { getClientes, deleteClientes } from '../../services/clientes'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -69,7 +70,8 @@ export function Clientes() {
   function toggleSelect(id: number) {
     setSelected((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }
@@ -252,6 +254,8 @@ interface ListViewProps {
 }
 
 function ListView({ clientes, selected, allSelected, onSelect, onSelectAll, onNavigate }: ListViewProps) {
+  const { ocultos } = useValoresOcultosStore()
+  const exibir = (valor: number) => (ocultos ? '••••••' : formatCurrency(valor))
   return (
     <Card>
       <Table>
@@ -289,7 +293,7 @@ function ListView({ clientes, selected, allSelected, onSelect, onSelectAll, onNa
               </Td>
               <Td><Badge variant={statusVariant[c.status]}>{statusLabel[c.status]}</Badge></Td>
               <Td className="capitalize">{c.forma_pagamento}</Td>
-              <Td className="font-medium">{formatCurrency(Number(c.valor_total_acordado))}</Td>
+              <Td className="font-medium">{exibir(Number(c.valor_total_acordado))}</Td>
             </Tr>
           ))}
         </Tbody>
@@ -308,6 +312,8 @@ interface GridViewProps {
 }
 
 function GridView({ clientes, selected, onSelect, onNavigate }: GridViewProps) {
+  const { ocultos } = useValoresOcultosStore()
+  const exibir = (valor: number) => (ocultos ? '••••••' : formatCurrency(valor))
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
       {clientes.map((c) => {
@@ -347,7 +353,7 @@ function GridView({ clientes, selected, onSelect, onNavigate }: GridViewProps) {
               <div>
                 <p className="text-xs text-[#71717a] uppercase tracking-wider">Valor total</p>
                 <p className="text-base font-semibold text-[#fafafa] mt-0.5">
-                  {formatCurrency(Number(c.valor_total_acordado))}
+                  {exibir(Number(c.valor_total_acordado))}
                 </p>
               </div>
               <div className="text-right">
