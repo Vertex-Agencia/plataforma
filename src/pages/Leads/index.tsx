@@ -457,7 +457,12 @@ export function Leads() {
               <AnaliseIASection
                 lead={leadAtual}
                 onAnalisar={() => analisarMutation.mutate(leadAtual.id)}
-                analisando={analisarMutation.isPending}
+                analisando={analisarMutation.isPending && analisarMutation.variables === leadAtual.id}
+                erroEnvio={
+                  analisarMutation.isError && analisarMutation.variables === leadAtual.id
+                    ? getErrorMessage(analisarMutation.error, 'Não foi possível iniciar a análise.')
+                    : null
+                }
               />
 
               <Select
@@ -649,7 +654,17 @@ function IconeFacebook({ size = 12 }: { size?: number }) {
   )
 }
 
-function AnaliseIASection({ lead, onAnalisar, analisando }: { lead: Lead; onAnalisar: () => void; analisando: boolean }) {
+function AnaliseIASection({
+  lead,
+  onAnalisar,
+  analisando,
+  erroEnvio,
+}: {
+  lead: Lead
+  onAnalisar: () => void
+  analisando: boolean
+  erroEnvio?: string | null
+}) {
   const [copiado, setCopiado] = useState(false)
 
   async function copiarMensagem() {
@@ -702,6 +717,7 @@ function AnaliseIASection({ lead, onAnalisar, analisando }: { lead: Lead; onAnal
           <Button variant="default" size="sm" loading={analisando} onClick={onAnalisar} className="w-fit">
             <Sparkles size={13} /> Analisar com IA
           </Button>
+          {erroEnvio && <p className="text-xs text-[#ef4444]">{erroEnvio}</p>}
         </>
       )}
 
@@ -718,6 +734,10 @@ function AnaliseIASection({ lead, onAnalisar, analisando }: { lead: Lead; onAnal
 
       {lead.analise_status === 'erro' && (
         <p className="text-xs text-[#ef4444]">{lead.analise_erro ?? 'Erro desconhecido na análise.'}</p>
+      )}
+
+      {erroEnvio && (lead.analise_status === 'erro' || lead.analise_status === 'concluida') && (
+        <p className="text-xs text-[#ef4444]">{erroEnvio}</p>
       )}
 
       {lead.analise_status === 'concluida' && (
