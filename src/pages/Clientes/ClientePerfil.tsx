@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Download, Upload, CheckCircle, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Download, Upload, CheckCircle, RotateCcw, Eye, EyeOff } from 'lucide-react'
 import {
   getClienteById,
   getParcelasByCliente,
@@ -43,6 +43,24 @@ export function ClientePerfil() {
   const [pagandoParcela, setPagandoParcela] = useState<Parcela | null>(null)
   const [valorDigitado, setValorDigitado] = useState('')
   const [revertendoId, setRevertendoId] = useState<number | null>(null)
+
+  // Preferência de ocultar valores fica salva por navegador — útil pra compartilhar a tela
+  // com o cliente sem expor o que ainda falta pagar (ou já foi pago).
+  const [valoresOcultos, setValoresOcultos] = useState(() => {
+    try { return localStorage.getItem('valores-ocultos') === 'true' } catch { return false }
+  })
+
+  function alternarValoresOcultos() {
+    setValoresOcultos((prev) => {
+      const next = !prev
+      try { localStorage.setItem('valores-ocultos', String(next)) } catch { /* ignora falha de storage */ }
+      return next
+    })
+  }
+
+  function exibir(valor: number): string {
+    return valoresOcultos ? '••••••' : formatCurrency(valor)
+  }
 
   const { data: cliente, isLoading, isError } = useQuery<Cliente>({
     queryKey: ['cliente', user?.id, clienteId],
@@ -161,20 +179,29 @@ export function ClientePerfil() {
             </div>
             {cliente.observacao && <p className="mt-2 text-sm text-[#a1a1aa]">{cliente.observacao}</p>}
           </div>
-          <div className="text-right shrink-0">
-            <p className="text-2xl font-semibold text-[#fafafa]">{formatCurrency(Number(cliente.valor_total_acordado))}</p>
-            <p className="text-xs text-[#a1a1aa]">valor total</p>
+          <div className="text-right shrink-0 flex items-start gap-2">
+            <div>
+              <p className="text-2xl font-semibold text-[#fafafa]">{exibir(Number(cliente.valor_total_acordado))}</p>
+              <p className="text-xs text-[#a1a1aa]">valor total</p>
+            </div>
+            <button
+              onClick={alternarValoresOcultos}
+              title={valoresOcultos ? 'Mostrar valores' : 'Ocultar valores'}
+              className="p-1.5 rounded-[8px] text-[#71717a] hover:text-[#fafafa] hover:bg-[#18181b] transition-colors shrink-0"
+            >
+              {valoresOcultos ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-4 mt-5 pt-5 border-t border-[rgba(255,255,255,0.07)]">
           <div>
             <p className="text-xs text-[#a1a1aa] uppercase tracking-wider">Pago</p>
-            <p className="text-lg font-semibold text-[#22c55e] mt-0.5">{formatCurrency(totalPago)}</p>
+            <p className="text-lg font-semibold text-[#22c55e] mt-0.5">{exibir(totalPago)}</p>
           </div>
           <div>
             <p className="text-xs text-[#a1a1aa] uppercase tracking-wider">Pendente</p>
-            <p className="text-lg font-semibold text-[#f59e0b] mt-0.5">{formatCurrency(totalPendente)}</p>
+            <p className="text-lg font-semibold text-[#f59e0b] mt-0.5">{exibir(totalPendente)}</p>
           </div>
           <div>
             <p className="text-xs text-[#a1a1aa] uppercase tracking-wider">Parcelas</p>
@@ -194,7 +221,7 @@ export function ClientePerfil() {
                   {p.numero_parcela}
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm text-[#fafafa]">{formatCurrency(Number(p.valor_parcela))}</p>
+                  <p className="text-sm text-[#fafafa]">{exibir(Number(p.valor_parcela))}</p>
                   <p className="text-xs text-[#a1a1aa]">
                     Vence {formatDate(p.data_vencimento)}
                     {p.data_pagamento && ` · Pago em ${formatDate(p.data_pagamento)}`}
@@ -251,7 +278,7 @@ export function ClientePerfil() {
               <div className="flex flex-col gap-1.5 text-sm">
                 <div className="flex justify-between">
                   <span className="text-[#a1a1aa]">Valor mensal</span>
-                  <span className="text-[#fafafa]">{formatCurrency(Number(manutencao.valor_mensal_acordado))}</span>
+                  <span className="text-[#fafafa]">{exibir(Number(manutencao.valor_mensal_acordado))}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#a1a1aa]">Início</span>
