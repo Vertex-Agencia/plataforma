@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Search, Settings2, Trash2, Phone, Globe, Star, ChevronUp, ChevronDown, History,
-  Building2, MapPin, Sparkles, RefreshCw, Copy, Check, AlertTriangle,
+  Building2, MapPin, Sparkles, RefreshCw, Copy, Check, AlertTriangle, ExternalLink,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import {
@@ -447,69 +447,67 @@ export function Leads() {
               <div className="grid sm:grid-cols-2 gap-3">
                 {leadAtual.telefone && <TelefoneAcoes telefone={leadAtual.telefone} />}
 
-                {leadAtual.site ? (
-                  <a
-                    href={leadAtual.site.startsWith('http') ? leadAtual.site : `https://${leadAtual.site}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-2 text-sm text-[#3b82f6] bg-[#18181b] rounded-[8px] px-3 py-2 truncate hover:underline"
-                  >
-                    <Globe size={14} className="shrink-0" /> <span className="truncate">{leadAtual.site}</span>
-                  </a>
-                ) : (
-                  <div className="flex items-center gap-1.5 bg-[#18181b] rounded-[8px] px-2 py-1.5">
-                    <Globe size={14} className="text-[#52525b] shrink-0 ml-1" />
-                    <input
-                      value={siteRascunho}
-                      onChange={(e) => setSiteRascunho(e.target.value)}
-                      placeholder="Adicionar site..."
-                      className="flex-1 min-w-0 bg-transparent text-sm text-[#fafafa] placeholder:text-[#52525b] outline-none"
-                    />
-                    {siteRascunho.trim() && siteRascunho.trim() !== (leadAtual.site ?? '') && (
-                      <button
-                        onClick={() => salvarContatoMutation.mutate({ id: leadAtual.id, site: siteRascunho.trim(), instagram_url: leadAtual.instagram_url ?? null })}
-                        disabled={salvarContatoMutation.isPending}
-                        className="text-xs text-[#22c55e] hover:underline shrink-0 disabled:opacity-50"
-                      >
-                        Salvar
-                      </button>
-                    )}
-                  </div>
-                )}
+                <div className="flex items-center gap-1.5 bg-[#18181b] rounded-[8px] px-2 py-1.5">
+                  <Globe size={14} className="text-[#52525b] shrink-0 ml-1" />
+                  <input
+                    value={siteRascunho}
+                    onChange={(e) => setSiteRascunho(e.target.value)}
+                    placeholder="Adicionar site..."
+                    className="flex-1 min-w-0 bg-transparent text-sm text-[#fafafa] placeholder:text-[#52525b] outline-none"
+                  />
+                  {siteRascunho.trim() && siteRascunho.trim() !== (leadAtual.site ?? '') ? (
+                    <button
+                      onClick={() => salvarContatoMutation.mutate({ id: leadAtual.id, site: siteRascunho.trim(), instagram_url: leadAtual.instagram_url ?? null })}
+                      disabled={salvarContatoMutation.isPending}
+                      className="text-xs text-[#22c55e] hover:underline shrink-0 disabled:opacity-50"
+                    >
+                      Salvar
+                    </button>
+                  ) : leadAtual.site && (
+                    <a
+                      href={leadAtual.site.startsWith('http') ? leadAtual.site : `https://${leadAtual.site}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Abrir site"
+                      className="text-[#71717a] hover:text-[#3b82f6] transition-colors shrink-0"
+                    >
+                      <ExternalLink size={13} />
+                    </a>
+                  )}
+                </div>
 
-                {leadAtual.instagram_url ? (
-                  <a
-                    href={leadAtual.instagram_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-2 text-sm text-[#3b82f6] bg-[#18181b] rounded-[8px] px-3 py-2 truncate hover:underline"
-                  >
-                    <IconeInstagram size={14} className="shrink-0" /> <span className="truncate">{leadAtual.instagram_url}</span>
-                  </a>
-                ) : (
-                  <div className="flex items-center gap-1.5 bg-[#18181b] rounded-[8px] px-2 py-1.5 text-[#52525b]">
-                    <IconeInstagram size={14} className="shrink-0 ml-1" />
-                    <input
-                      value={instagramRascunho}
-                      onChange={(e) => setInstagramRascunho(e.target.value)}
-                      placeholder="Adicionar Instagram..."
-                      className="flex-1 min-w-0 bg-transparent text-sm text-[#fafafa] placeholder:text-[#52525b] outline-none"
-                    />
-                    {instagramRascunho.trim() && instagramRascunho.trim() !== (leadAtual.instagram_url ?? '') && (
-                      <button
-                        onClick={() => {
-                          const valor = instagramRascunho.trim()
-                          const url = valor.startsWith('http') ? valor : `https://instagram.com/${valor.replace(/^@/, '')}`
-                          salvarContatoMutation.mutate({ id: leadAtual.id, site: leadAtual.site ?? null, instagram_url: url })
-                        }}
-                        disabled={salvarContatoMutation.isPending}
-                        className="text-xs text-[#22c55e] hover:underline shrink-0 disabled:opacity-50"
-                      >
-                        Salvar
-                      </button>
-                    )}
-                  </div>
-                )}
+                <div className="flex items-center gap-1.5 bg-[#18181b] rounded-[8px] px-2 py-1.5 text-[#52525b]">
+                  <IconeInstagram size={14} className="shrink-0 ml-1" />
+                  <input
+                    value={instagramRascunho}
+                    onChange={(e) => setInstagramRascunho(e.target.value)}
+                    placeholder="Adicionar Instagram..."
+                    className="flex-1 min-w-0 bg-transparent text-sm text-[#fafafa] placeholder:text-[#52525b] outline-none"
+                  />
+                  {instagramRascunho.trim() && instagramRascunho.trim() !== (leadAtual.instagram_url ?? '') ? (
+                    <button
+                      onClick={() => {
+                        const valor = instagramRascunho.trim()
+                        const url = valor.startsWith('http') ? valor : `https://instagram.com/${valor.replace(/^@/, '')}`
+                        salvarContatoMutation.mutate({ id: leadAtual.id, site: leadAtual.site ?? null, instagram_url: url })
+                      }}
+                      disabled={salvarContatoMutation.isPending}
+                      className="text-xs text-[#22c55e] hover:underline shrink-0 disabled:opacity-50"
+                    >
+                      Salvar
+                    </button>
+                  ) : leadAtual.instagram_url && (
+                    <a
+                      href={leadAtual.instagram_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Abrir Instagram"
+                      className="text-[#71717a] hover:text-[#3b82f6] transition-colors shrink-0"
+                    >
+                      <ExternalLink size={13} />
+                    </a>
+                  )}
+                </div>
 
                 {leadAtual.endereco && (
                   <div className="flex items-center gap-2 text-sm text-[#fafafa] bg-[#18181b] rounded-[8px] px-3 py-2 sm:col-span-2">

@@ -124,11 +124,12 @@ export async function registrarPagamentoParcela(
   parcelaId: number,
   valorPago: number,
   todasParcelas: Parcela[],
-  valorTotalAcordado: number
+  valorTotalAcordado: number,
+  dataPagamento?: string
 ) {
   const { error } = await supabase
     .from('parcelas')
-    .update({ status: 'pago', data_pagamento: new Date().toISOString(), valor_parcela: valorPago })
+    .update({ status: 'pago', data_pagamento: dataPagamento ?? new Date().toISOString(), valor_parcela: valorPago })
     .eq('id', parcelaId)
   if (error) throw error
 

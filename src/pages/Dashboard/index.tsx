@@ -75,6 +75,7 @@ export function Dashboard() {
   // base no valor total acordado — mesma lógica usada no perfil do cliente.
   const [pagandoParcela, setPagandoParcela] = useState<ParcelaComCliente | null>(null)
   const [valorDigitado, setValorDigitado] = useState('')
+  const [dataPagamentoDigitada, setDataPagamentoDigitada] = useState('')
 
   const pagarParcelaMutation = useMutation({
     mutationFn: async () => {
@@ -83,19 +84,27 @@ export function Dashboard() {
         getClienteById(pagandoParcela!.cliente_id),
         getParcelasByCliente(pagandoParcela!.cliente_id),
       ])
-      return registrarPagamentoParcela(pagandoParcela!.id, valor, todasParcelas, Number(cliente.valor_total_acordado))
+      return registrarPagamentoParcela(
+        pagandoParcela!.id,
+        valor,
+        todasParcelas,
+        Number(cliente.valor_total_acordado),
+        dataPagamentoDigitada ? new Date(`${dataPagamentoDigitada}T12:00:00`).toISOString() : undefined
+      )
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-metrics', user?.id] })
       queryClient.invalidateQueries({ queryKey: ['parcelas-pagas', user?.id] })
       setPagandoParcela(null)
       setValorDigitado('')
+      setDataPagamentoDigitada('')
     },
   })
 
   function abrirModalPagamento(p: ParcelaComCliente) {
     setPagandoParcela(p)
     setValorDigitado(Number(p.valor_parcela).toFixed(2).replace('.', ','))
+    setDataPagamentoDigitada(new Date().toISOString().split('T')[0])
   }
 
   function valorValido() {
@@ -314,11 +323,11 @@ export function Dashboard() {
       {/* Modal: registrar pagamento */}
       <Modal
         open={!!pagandoParcela}
-        onClose={() => { setPagandoParcela(null); setValorDigitado('') }}
+        onClose={() => { setPagandoParcela(null); setValorDigitado(''); setDataPagamentoDigitada('') }}
         title={`Parcela ${pagandoParcela?.numero_parcela} — Registrar pagamento`}
         actions={
           <>
-            <Button variant="ghost" onClick={() => { setPagandoParcela(null); setValorDigitado('') }}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => { setPagandoParcela(null); setValorDigitado(''); setDataPagamentoDigitada('') }}>Cancelar</Button>
             <Button
               variant="accent"
               loading={pagarParcelaMutation.isPending}
@@ -339,13 +348,21 @@ export function Dashboard() {
             <span className="text-[#a1a1aa]">Valor da parcela</span>
             <span className="text-[#fafafa] font-medium">{exibir(Number(pagandoParcela?.valor_parcela ?? 0))}</span>
           </div>
-          <Input
-            label="Valor recebido (R$)"
-            value={valorDigitado}
-            onChange={(e) => setValorDigitado(e.target.value)}
-            placeholder="0,00"
-            autoFocus
-          />
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Valor recebido (R$)"
+              value={valorDigitado}
+              onChange={(e) => setValorDigitado(e.target.value)}
+              placeholder="0,00"
+              autoFocus
+            />
+            <Input
+              label="Data do pagamento"
+              type="date"
+              value={dataPagamentoDigitada}
+              onChange={(e) => setDataPagamentoDigitada(e.target.value)}
+            />
+          </div>
           <p className="text-xs text-[#71717a]">
             Se o valor recebido for diferente do previsto, as demais parcelas pendentes desse cliente serão recalculadas automaticamente com base no valor total acordado.
           </p>
