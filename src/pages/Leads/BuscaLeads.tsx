@@ -72,6 +72,10 @@ export function BuscaLeads() {
   const [geoErro, setGeoErro] = useState<string | null>(null)
   const [geoTentativa, setGeoTentativa] = useState(0)
 
+  // Busca disparada e ainda em andamento em background no Apify — o histórico é repollado
+  // a cada 3s e atualiza `quantidade_encontrada` dessa busca em tempo real até ela concluir.
+  const [buscaEmAndamentoId, setBuscaEmAndamentoId] = useState<number | null>(null)
+
   // Geocodifica a localização digitada (debounced) só para posicionar o mapa —
   // é independente do raio, que é aplicado como um círculo por cima quando escolhido.
   useEffect(() => {
@@ -110,17 +114,32 @@ export function BuscaLeads() {
     mutationFn: () => buscarLeadsApify({ termo_busca: termoBusca, localizacao, quantidade, filtro_site: filtroSite, raio_km: raioKm }),
     onMutate: () => setErro(null),
     onSuccess: async (data) => {
-      const { data: novoHistorico } = await refetchHistorico()
-      const busca = novoHistorico?.find((h) => h.id === data.busca_id)
-      if (busca) {
-        setEnvioResultado(null)
-        setBuscaSelecionada(busca)
-      }
+      setBuscaEmAndamentoId(data.busca_id)
+      await refetchHistorico()
       setTermoBusca('')
       setLocalizacao('')
     },
     onError: (err) => setErro(getErrorMessage(err, 'Erro ao buscar leads.')),
   })
+
+  // Busca acompanhada em tempo real (a que acabou de ser disparada), enquanto ainda está pendente.
+  const buscaEmAndamento = historico?.find((h) => h.id === buscaEmAndamentoId) ?? null
+
+  // Quando a busca acompanhada termina, abre automaticamente a prévia dos resultados
+  // (sucesso) ou mostra o erro — e para de acompanhá-la.
+  useEffect(() => {
+    if (!buscaEmAndamento || buscaEmAndamento.status === 'pendente') return
+    const t = setTimeout(() => {
+      if (buscaEmAndamento.status === 'concluida') {
+        setEnvioResultado(null)
+        setBuscaSelecionada(buscaEmAndamento)
+      } else if (buscaEmAndamento.status === 'erro') {
+        setErro(buscaEmAndamento.erro_mensagem ?? 'Erro ao buscar leads.')
+      }
+      setBuscaEmAndamentoId(null)
+    }, 0)
+    return () => clearTimeout(t)
+  }, [buscaEmAndamento])
 
   const deleteBuscaMutation = useMutation({
     mutationFn: (id: number) => deleteBusca(id),
@@ -153,7 +172,8 @@ export function BuscaLeads() {
     },
   })
 
-  const podeBuscar = termoBusca.trim().length > 0 && localizacao.trim().length > 0 && !buscarMutation.isPending
+  const buscando = buscarMutation.isPending || !!buscaEmAndamento
+  const podeBuscar = termoBusca.trim().length > 0 && localizacao.trim().length > 0 && !buscando
 
   function abrirBusca(busca: LeadBusca) {
     setEnvioResultado(null)
@@ -179,8 +199,8 @@ export function BuscaLeads() {
           />
 
           <div className="relative flex items-start gap-3">
-            <div className={`w-11 h-11 rounded-[12px] bg-[#22c55e]/10 border border-[#22c55e]/20 flex items-center justify-center shrink-0 transition-shadow ${buscarMutation.isPending ? 'shadow-[0_0_0_6px_rgba(34,197,94,0.08)]' : ''}`}>
-              <Radar size={20} className={`text-[#22c55e] ${buscarMutation.isPending ? 'animate-spin' : ''}`} style={buscarMutation.isPending ? { animationDuration: '2s' } : undefined} />
+            <div className={`w-11 h-11 rounded-[12px] bg-[#22c55e]/10 border border-[#22c55e]/20 flex items-center justify-center shrink-0 transition-shadow ${buscando ? 'shadow-[0_0_0_6px_rgba(34,197,94,0.08)]' : ''}`}>
+              <Radar size={20} className={`text-[#22c55e] ${buscando ? 'animate-spin' : ''}`} style={buscando ? { animationDuration: '2s' } : undefined} />
             </div>
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-[#52525b]">Radar de prospecção</p>
@@ -292,10 +312,13 @@ export function BuscaLeads() {
               size="lg"
               className="mt-1 w-full justify-center"
               disabled={!podeBuscar}
-              loading={buscarMutation.isPending}
+              loading={buscando}
               onClick={() => buscarMutation.mutate()}
             >
-              <Sparkles size={16} /> {buscarMutation.isPending ? 'Buscando...' : 'Buscar Leads'}
+              <Sparkles size={16} />
+              {buscaEmAndamento
+                ? `Buscando... ${buscaEmAndamento.quantidade_encontrada ?? 0} lead${(buscaEmAndamento.quantidade_encontrada ?? 0) === 1 ? '' : 's'} encontrado${(buscaEmAndamento.quantidade_encontrada ?? 0) === 1 ? '' : 's'}`
+                : buscarMutation.isPending ? 'Buscando...' : 'Buscar Leads'}
             </Button>
 
             <p className="text-xs text-[#52525b]">Os leads encontrados ficam disponíveis para revisão antes de entrar no pipeline.</p>
@@ -311,7 +334,14 @@ export function BuscaLeads() {
         {/* Mapa */}
         <div className="lg:col-span-7 lg:sticky lg:top-6">
           <div className="h-[380px] lg:h-[600px]">
-            <RadarMap geo={geo} geoLoading={geoLoading} raioKm={raioKm} searching={buscarMutation.isPending} />
+            <RadarMap
+              geo={geo}
+              geoLoading={geoLoading}
+              raioKm={raioKm}
+              searching={buscando}
+              encontrados={buscaEmAndamento?.quantidade_encontrada ?? null}
+              solicitados={buscaEmAndamento?.quantidade_solicitada ?? quantidade}
+            />
           </div>
         </div>
       </div>
@@ -353,8 +383,16 @@ export function BuscaLeads() {
                   </div>
 
                   {h.status === 'pendente' && (
-                    <div className="w-full h-1 bg-[#27272a] rounded-full overflow-hidden">
-                      <div className="h-full w-1/4 bg-[#f59e0b] rounded-full animate-progress-indeterminate" />
+                    <div className="flex flex-col gap-1.5">
+                      <div className="w-full h-1 bg-[#27272a] rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[#f59e0b] rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min(100, ((h.quantidade_encontrada ?? 0) / h.quantidade_solicitada) * 100)}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-[#f59e0b] font-mono tabular-nums">
+                        {h.quantidade_encontrada ?? 0} lead{(h.quantidade_encontrada ?? 0) === 1 ? '' : 's'} encontrado{(h.quantidade_encontrada ?? 0) === 1 ? '' : 's'} até agora...
+                      </p>
                     </div>
                   )}
                   {h.erro_mensagem && <p className="text-xs text-[#ef4444]">{h.erro_mensagem}</p>}

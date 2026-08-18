@@ -1,12 +1,13 @@
 import { useEffect, useState, useRef } from 'react'
-import { LogOut, Upload, X, ImageIcon, KeyRound, Eye, EyeOff } from 'lucide-react'
+import { LogOut, Upload, X, ImageIcon, KeyRound, Eye, EyeOff, RotateCcw, Sparkles } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { supabase } from '../../lib/supabase'
-import { getConfiguracoes, salvarApifyToken } from '../../services/configuracoes'
+import { getConfiguracoes, salvarApifyToken, salvarConfigAgente } from '../../services/configuracoes'
 import { getErrorMessage } from '../../utils/format'
+import { PROMPT_PADRAO_AGENTE, MODELO_PADRAO_AGENTE, MODELOS_OPENAI } from '../../constants/agenteIA'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
-import { Input } from '../../components/ui/Input'
+import { Input, Select, Textarea } from '../../components/ui/Input'
 import { Avatar } from '../../components/ui/Avatar'
 
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/svg+xml', 'image/webp']
@@ -29,10 +30,32 @@ export function Configuracoes() {
   const [apifyError, setApifyError] = useState<string | null>(null)
   const [apifySaved, setApifySaved] = useState(false)
 
+  const [openaiKey, setOpenaiKey] = useState('')
+  const [openaiKeyVisible, setOpenaiKeyVisible] = useState(false)
+  const [modelo, setModelo] = useState(MODELO_PADRAO_AGENTE)
+  const [modeloCustomizado, setModeloCustomizado] = useState('')
+  const [prompt, setPrompt] = useState(PROMPT_PADRAO_AGENTE)
+  const [agenteSaving, setAgenteSaving] = useState(false)
+  const [agenteError, setAgenteError] = useState<string | null>(null)
+  const [agenteSaved, setAgenteSaved] = useState(false)
+
+  const modeloEhCustomizado = !MODELOS_OPENAI.some((m) => m.id === modelo)
+
   useEffect(() => {
     if (!user) return
     getConfiguracoes(user.id)
-      .then((config) => setApifyToken(config?.apify_api_token ?? ''))
+      .then((config) => {
+        setApifyToken(config?.apify_api_token ?? '')
+        setOpenaiKey(config?.openai_api_key ?? '')
+        const modeloSalvo = config?.agente_modelo || MODELO_PADRAO_AGENTE
+        if (MODELOS_OPENAI.some((m) => m.id === modeloSalvo)) {
+          setModelo(modeloSalvo)
+        } else {
+          setModelo('outro')
+          setModeloCustomizado(modeloSalvo)
+        }
+        setPrompt(config?.agente_prompt || PROMPT_PADRAO_AGENTE)
+      })
       .catch((err) => setApifyError(getErrorMessage(err, 'Erro ao carregar configurações.')))
       .finally(() => setApifyLoading(false))
   }, [user])
@@ -49,6 +72,25 @@ export function Configuracoes() {
       setApifyError(getErrorMessage(err, 'Erro ao salvar chave.'))
     } finally {
       setApifySaving(false)
+    }
+  }
+
+  async function handleSalvarAgente() {
+    if (!user) return
+    setAgenteSaving(true)
+    setAgenteError(null)
+    setAgenteSaved(false)
+    try {
+      await salvarConfigAgente(user.id, {
+        openaiApiKey: openaiKey,
+        modelo: modelo === 'outro' ? modeloCustomizado.trim() : modelo,
+        prompt,
+      })
+      setAgenteSaved(true)
+    } catch (err) {
+      setAgenteError(getErrorMessage(err, 'Erro ao salvar configuração do agente.'))
+    } finally {
+      setAgenteSaving(false)
     }
   }
 
@@ -105,7 +147,7 @@ export function Configuracoes() {
   }
 
   return (
-    <div className="max-w-lg flex flex-col gap-5">
+    <div className="max-w-2xl flex flex-col gap-5">
       <Card className="p-5">
         <p className="text-sm font-semibold text-[#fafafa] mb-4">Perfil</p>
         <div className="flex items-center gap-4">
@@ -204,6 +246,93 @@ export function Configuracoes() {
           </div>
           {apifyError && <p className="text-xs text-[#ef4444]">{apifyError}</p>}
           {apifySaved && <p className="text-xs text-[#22c55e]">Chave salva com sucesso.</p>}
+        </div>
+      </Card>
+
+      <Card className="p-5">
+        <p className="text-sm font-semibold text-[#fafafa] mb-1 flex items-center gap-2">
+          <Sparkles size={15} /> Agente de Análise de Leads
+        </p>
+        <p className="text-xs text-[#71717a] mb-4">
+          Roda automaticamente em todo lead novo: lê o site, acha Instagram/Facebook linkados nele e gera um resumo de oportunidades + mensagem de abordagem.
+        </p>
+
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm text-[#a1a1aa]">Chave da API (OpenAI)</label>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Input
+                  type={openaiKeyVisible ? 'text' : 'password'}
+                  placeholder="Cole sua chave da OpenAI (sk-...)"
+                  value={openaiKey}
+                  disabled={apifyLoading}
+                  onChange={(e) => { setOpenaiKey(e.target.value); setAgenteSaved(false) }}
+                  className="pr-9"
+                />
+                <button
+                  type="button"
+                  onClick={() => setOpenaiKeyVisible((v) => !v)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#71717a] hover:text-[#fafafa] transition-colors"
+                  title={openaiKeyVisible ? 'Ocultar' : 'Mostrar'}
+                >
+                  {openaiKeyVisible ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm text-[#a1a1aa]">Modelo</label>
+            <Select
+              value={modelo}
+              disabled={apifyLoading}
+              onChange={(e) => { setModelo(e.target.value); setAgenteSaved(false) }}
+            >
+              {MODELOS_OPENAI.map((m) => (
+                <option key={m.id} value={m.id}>{m.label} — {m.descricao}</option>
+              ))}
+              <option value="outro">Outro modelo (digitar ID)</option>
+            </Select>
+            {modeloEhCustomizado && (
+              <Input
+                placeholder="ID exato do modelo, ex: o3-mini"
+                value={modeloCustomizado}
+                onChange={(e) => { setModeloCustomizado(e.target.value); setAgenteSaved(false) }}
+              />
+            )}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-[#a1a1aa]">Prompt do agente</label>
+              <button
+                type="button"
+                onClick={() => { setPrompt(PROMPT_PADRAO_AGENTE); setAgenteSaved(false) }}
+                className="flex items-center gap-1 text-xs text-[#71717a] hover:text-[#fafafa] transition-colors"
+              >
+                <RotateCcw size={12} /> Restaurar padrão
+              </button>
+            </div>
+            <Textarea
+              rows={12}
+              value={prompt}
+              disabled={apifyLoading}
+              onChange={(e) => { setPrompt(e.target.value); setAgenteSaved(false) }}
+              className="font-mono text-xs leading-relaxed"
+            />
+            <p className="text-xs text-[#52525b]">
+              O modelo recebe esse texto como instrução, seguido dos dados coletados do lead (site, Instagram, Facebook). Peça sempre uma resposta em JSON — é o que a plataforma espera de volta.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button variant="accent" size="md" loading={agenteSaving} disabled={apifyLoading} onClick={handleSalvarAgente}>
+              Salvar
+            </Button>
+            {agenteError && <p className="text-xs text-[#ef4444]">{agenteError}</p>}
+            {agenteSaved && <p className="text-xs text-[#22c55e]">Configuração salva com sucesso.</p>}
+          </div>
         </div>
       </Card>
 

@@ -139,7 +139,7 @@ function VarreduraNoRaio({ geo, raioKm }: { geo: GeoPonto; raioKm: number | null
   )
 }
 
-function StatusPill({ raioKm }: { raioKm: number | null }) {
+function StatusPill({ raioKm, encontrados, solicitados }: { raioKm: number | null; encontrados: number | null; solicitados: number }) {
   const [msgIndex, setMsgIndex] = useState(0)
 
   useEffect(() => {
@@ -152,6 +152,12 @@ function StatusPill({ raioKm }: { raioKm: number | null }) {
       <div className="relative flex items-center gap-2 bg-[#09090b]/85 backdrop-blur-sm border border-[rgba(255,255,255,0.1)] rounded-full pl-2.5 pr-3.5 py-1.5">
         <Satellite size={13} className="text-[#22c55e] shrink-0" />
         <span className="text-xs text-[#e4e4e7] font-mono transition-opacity duration-300">{STATUS_MESSAGES[msgIndex]}</span>
+        {encontrados != null && (
+          <>
+            <span className="w-px h-3 bg-[rgba(255,255,255,0.15)]" />
+            <span className="text-xs text-[#22c55e] font-mono tabular-nums">{encontrados}/{solicitados} leads</span>
+          </>
+        )}
       </div>
 
       {raioKm != null && (
@@ -168,9 +174,11 @@ interface RadarMapProps {
   geoLoading: boolean
   raioKm: number | null
   searching: boolean
+  encontrados?: number | null
+  solicitados?: number
 }
 
-export function RadarMap({ geo, geoLoading, raioKm, searching }: RadarMapProps) {
+export function RadarMap({ geo, geoLoading, raioKm, searching, encontrados = null, solicitados = 0 }: RadarMapProps) {
   const pinIcon = useMemo(
     () =>
       L.divIcon({
@@ -216,7 +224,7 @@ export function RadarMap({ geo, geoLoading, raioKm, searching }: RadarMapProps) 
         {searching && <VarreduraNoRaio geo={geo} raioKm={raioKm} />}
       </MapContainer>
 
-      {searching && <StatusPill raioKm={raioKm} />}
+      {searching && <StatusPill raioKm={raioKm} encontrados={encontrados} solicitados={solicitados} />}
 
       <div className="absolute bottom-3 left-3 z-[400] pointer-events-none bg-[#09090b]/70 backdrop-blur-sm border border-[rgba(255,255,255,0.1)] rounded-[8px] px-2.5 py-1">
         <span className="text-[11px] font-mono text-[#71717a] tabular-nums">

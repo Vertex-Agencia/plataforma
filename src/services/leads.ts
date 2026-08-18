@@ -101,6 +101,15 @@ export async function deleteLeads(ids: number[]) {
   if (error) throw error
 }
 
+// Dispara (ou redispara) a varredura com IA pra um lead específico — usado tanto pro botão
+// "Analisar novamente" quanto, futuramente, por qualquer fluxo de criação manual de lead.
+// A entrada automática de leads via Busca de Leads é analisada sozinha pelo Database Webhook
+// configurado no Supabase (INSERT em leads → Edge Function analisar-lead), sem passar por aqui.
+export async function analisarLeadAgora(leadId: number): Promise<void> {
+  const { error } = await supabase.functions.invoke('analisar-lead', { body: { lead_id: leadId } })
+  if (error) throw error
+}
+
 export type FiltroSite = 'ambos' | 'com' | 'sem'
 
 interface BuscarLeadsParams {
@@ -114,8 +123,10 @@ interface BuscarLeadsParams {
 interface BuscarLeadsResultado {
   sucesso: boolean
   busca_id: number
-  encontrados: number
-  resultados: LeadBuscaResultadoItem[]
+  // A busca roda em background no Apify — a resposta só confirma que começou.
+  // O progresso (quantidade_encontrada) e o resultado final chegam via polling
+  // do histórico (lead_buscas), não nesta resposta.
+  iniciado: boolean
 }
 
 export async function buscarLeadsApify(params: BuscarLeadsParams): Promise<BuscarLeadsResultado> {

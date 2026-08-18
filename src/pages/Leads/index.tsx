@@ -1,7 +1,10 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Settings2, Trash2, Phone, Globe, Star, ChevronUp, ChevronDown, History, Building2, MapPin } from 'lucide-react'
+import {
+  Plus, Search, Settings2, Trash2, Phone, Globe, Star, ChevronUp, ChevronDown, History,
+  Building2, MapPin, Sparkles, RefreshCw, Copy, Check, AlertTriangle,
+} from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import {
   getPipelineEtapas,
@@ -15,6 +18,7 @@ import {
   moveLead,
   deleteLeads,
   updateLead,
+  analisarLeadAgora,
 } from '../../services/leads'
 import type { Lead, PipelineEtapa, LeadBusca } from '../../types/database'
 import { getErrorMessage } from '../../utils/format'
@@ -52,6 +56,11 @@ export function Leads() {
   const [leadSelecionado, setLeadSelecionado] = useState<Lead | null>(null)
   const [observacaoRascunho, setObservacaoRascunho] = useState('')
 
+  const [analiseModalOpen, setAnaliseModalOpen] = useState(false)
+  const [analiseModo, setAnaliseModo] = useState<'lead' | 'etapa'>('lead')
+  const [analiseLeadId, setAnaliseLeadId] = useState('')
+  const [analiseEtapaId, setAnaliseEtapaId] = useState('')
+
   const { data: etapas, isLoading: etapasLoading } = useQuery<PipelineEtapa[]>({
     queryKey: ['pipeline-etapas', user?.id],
     queryFn: () => getPipelineEtapas(user!.id),
@@ -62,6 +71,7 @@ export function Leads() {
     queryKey: ['leads', user?.id],
     queryFn: () => getLeads(user!.id),
     enabled: !!user,
+    refetchInterval: (query) => (query.state.data ?? []).some((l) => l.analise_status === 'pendente') ? 3000 : false,
   })
 
   const { data: historico } = useQuery<LeadBusca[]>({
@@ -138,6 +148,21 @@ export function Leads() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leads', user?.id] }),
   })
 
+  const analisarMutation = useMutation({
+    mutationFn: (leadId: number) => analisarLeadAgora(leadId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leads', user?.id] }),
+  })
+
+  const analisarEmMassaMutation = useMutation({
+    mutationFn: (leadIds: number[]) => Promise.allSettled(leadIds.map((id) => analisarLeadAgora(id))),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads', user?.id] })
+      setAnaliseModalOpen(false)
+      setAnaliseLeadId('')
+      setAnaliseEtapaId('')
+    },
+  })
+
   function moverEtapa(index: number, direcao: -1 | 1) {
     if (!etapas) return
     const alvo = index + direcao
@@ -168,6 +193,9 @@ export function Leads() {
       <div className="flex items-center justify-between shrink-0 flex-wrap gap-3">
         <p className="text-sm text-[#a1a1aa]">{leads?.length ?? 0} leads · {etapas?.length ?? 0} etapas</p>
         <div className="flex items-center gap-2">
+          <Button variant="default" onClick={() => setAnaliseModalOpen(true)}>
+            <Sparkles size={16} /> Rodar Análise
+          </Button>
           <Button variant="default" onClick={() => setPipelineModalOpen(true)}>
             <Settings2 size={16} /> Gerenciar Pipeline
           </Button>
@@ -226,6 +254,8 @@ export function Leads() {
                       onDragStart={() => { dragLeadId.current = lead.id }}
                       onDelete={() => deleteLeadMutation.mutate(lead.id)}
                       onClick={() => { setObservacaoRascunho(lead.observacoes ?? ''); setLeadSelecionado(lead) }}
+                      onAnalisar={() => analisarMutation.mutate(lead.id)}
+                      analisando={analisarMutation.isPending && analisarMutation.variables === lead.id}
                     />
                   ))}
                 </div>
@@ -424,6 +454,12 @@ export function Leads() {
                 )}
               </div>
 
+              <AnaliseIASection
+                lead={leadAtual}
+                onAnalisar={() => analisarMutation.mutate(leadAtual.id)}
+                analisando={analisarMutation.isPending}
+              />
+
               <Select
                 label="Etapa"
                 value={leadAtual.etapa_id}
@@ -443,6 +479,69 @@ export function Leads() {
           )
         })()}
       </Modal>
+
+      {/* Modal: rodar análise em massa */}
+      <Modal
+        open={analiseModalOpen}
+        onClose={() => setAnaliseModalOpen(false)}
+        title="Rodar Análise com IA"
+        size="sm"
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => setAnaliseModalOpen(false)}>Cancelar</Button>
+            <Button
+              variant="accent"
+              loading={analisarEmMassaMutation.isPending}
+              disabled={analiseModo === 'lead' ? !analiseLeadId : !analiseEtapaId}
+              onClick={() => {
+                const ids = analiseModo === 'lead'
+                  ? [Number(analiseLeadId)]
+                  : leadsPorEtapa(Number(analiseEtapaId)).map((l) => l.id)
+                analisarEmMassaMutation.mutate(ids)
+              }}
+            >
+              <Sparkles size={14} /> Rodar análise
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-1 bg-[#18181b] border border-[rgba(255,255,255,0.07)] rounded-[10px] p-1">
+            <button
+              onClick={() => setAnaliseModo('lead')}
+              className={`flex-1 px-3 py-1.5 rounded-[8px] text-sm font-medium transition-colors ${analiseModo === 'lead' ? 'bg-[#27272a] text-[#fafafa]' : 'text-[#a1a1aa] hover:text-[#fafafa]'}`}
+            >
+              Um lead
+            </button>
+            <button
+              onClick={() => setAnaliseModo('etapa')}
+              className={`flex-1 px-3 py-1.5 rounded-[8px] text-sm font-medium transition-colors ${analiseModo === 'etapa' ? 'bg-[#27272a] text-[#fafafa]' : 'text-[#a1a1aa] hover:text-[#fafafa]'}`}
+            >
+              Coluna inteira
+            </button>
+          </div>
+
+          {analiseModo === 'lead' ? (
+            <Select label="Qual lead" value={analiseLeadId} onChange={(e) => setAnaliseLeadId(e.target.value)}>
+              <option value="">Selecione um lead</option>
+              {(leads ?? []).map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}
+            </Select>
+          ) : (
+            <Select label="Qual coluna" value={analiseEtapaId} onChange={(e) => setAnaliseEtapaId(e.target.value)}>
+              <option value="">Selecione uma etapa</option>
+              {(etapas ?? []).map((e) => (
+                <option key={e.id} value={e.id}>{e.nome} ({leadsPorEtapa(e.id).length} leads)</option>
+              ))}
+            </Select>
+          )}
+
+          {analiseModo === 'etapa' && analiseEtapaId && (
+            <p className="text-xs text-[#71717a]">
+              Isso dispara a análise pra {leadsPorEtapa(Number(analiseEtapaId)).length} lead(s) de uma vez — cada um consome créditos da OpenAI (e da Apify, se tiver Instagram/Facebook linkado no site).
+            </p>
+          )}
+        </div>
+      </Modal>
     </div>
   )
 }
@@ -452,9 +551,11 @@ interface LeadCardProps {
   onDragStart: () => void
   onDelete: () => void
   onClick: () => void
+  onAnalisar: () => void
+  analisando: boolean
 }
 
-function LeadCard({ lead, onDragStart, onDelete, onClick }: LeadCardProps) {
+function LeadCard({ lead, onDragStart, onDelete, onClick, onAnalisar, analisando }: LeadCardProps) {
   return (
     <div
       draggable
@@ -467,6 +568,14 @@ function LeadCard({ lead, onDragStart, onDelete, onClick }: LeadCardProps) {
           <p className="text-sm font-semibold text-[#fafafa] leading-snug truncate">{lead.nome}</p>
           {lead.categoria && <p className="text-xs text-[#71717a] mt-0.5 truncate">{lead.categoria}</p>}
         </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); onAnalisar() }}
+          disabled={analisando || lead.analise_status === 'pendente'}
+          className="opacity-0 group-hover:opacity-100 p-1 rounded-[6px] text-[#71717a] hover:text-[#22c55e] transition-all shrink-0 disabled:opacity-100 disabled:cursor-not-allowed"
+          title="Analisar com IA"
+        >
+          <Sparkles size={13} className={analisando || lead.analise_status === 'pendente' ? 'animate-pulse text-[#f59e0b]' : ''} />
+        </button>
         <button
           onClick={(e) => { e.stopPropagation(); onDelete() }}
           className="opacity-0 group-hover:opacity-100 p-1 rounded-[6px] text-[#71717a] hover:text-[#ef4444] transition-all shrink-0"
@@ -496,8 +605,139 @@ function LeadCard({ lead, onDragStart, onDelete, onClick }: LeadCardProps) {
         </div>
       )}
 
-      {lead.origem === 'apify_google_maps' && (
-        <Badge variant="blue" className="w-fit">Google Maps</Badge>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {lead.origem === 'apify_google_maps' && <Badge variant="blue">Google Maps</Badge>}
+        {lead.analise_status === 'pendente' && (
+          <Badge variant="amber" className="flex items-center gap-1">
+            <Sparkles size={10} className="animate-pulse" /> Analisando...
+          </Badge>
+        )}
+        {lead.analise_status === 'concluida' && (
+          <Badge variant="green" className="flex items-center gap-1">
+            <Sparkles size={10} /> Análise pronta
+          </Badge>
+        )}
+        {lead.analise_status === 'erro' && (
+          <Badge variant="red" className="flex items-center gap-1">
+            <AlertTriangle size={10} /> Falha na análise
+          </Badge>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Análise com IA ────────────────────────────────────────────────────────────
+// Ícones de Instagram/Facebook inline: a versão do lucide-react instalada não traz
+// ícones de marca (removidos do pacote deles), então desenhamos os glifos direto.
+
+function IconeInstagram({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+    </svg>
+  )
+}
+
+function IconeFacebook({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+    </svg>
+  )
+}
+
+function AnaliseIASection({ lead, onAnalisar, analisando }: { lead: Lead; onAnalisar: () => void; analisando: boolean }) {
+  const [copiado, setCopiado] = useState(false)
+
+  async function copiarMensagem() {
+    if (!lead.analise_mensagem) return
+    try {
+      await navigator.clipboard.writeText(lead.analise_mensagem)
+      setCopiado(true)
+      setTimeout(() => setCopiado(false), 1500)
+    } catch {
+      // Clipboard indisponível — ignora, sem crash.
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2.5 bg-[#18181b] border border-[rgba(255,255,255,0.07)] rounded-[10px] p-3.5">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-[#fafafa] flex items-center gap-1.5">
+          <Sparkles size={14} className="text-[#22c55e]" /> Análise com IA
+        </p>
+        {(lead.analise_status === 'concluida' || lead.analise_status === 'erro') && (
+          <button
+            onClick={onAnalisar}
+            disabled={analisando}
+            title="Analisar novamente"
+            className="p-1 rounded-[6px] text-[#71717a] hover:text-[#fafafa] hover:bg-[#27272a] transition-colors disabled:opacity-40"
+          >
+            <RefreshCw size={13} className={analisando ? 'animate-spin' : ''} />
+          </button>
+        )}
+      </div>
+
+      {(lead.instagram_url || lead.facebook_url) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {lead.instagram_url && (
+            <a href={lead.instagram_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-[#a1a1aa] hover:text-[#fafafa] transition-colors">
+              <IconeInstagram /> Instagram
+            </a>
+          )}
+          {lead.facebook_url && (
+            <a href={lead.facebook_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-[#a1a1aa] hover:text-[#fafafa] transition-colors">
+              <IconeFacebook /> Facebook
+            </a>
+          )}
+        </div>
+      )}
+
+      {!lead.analise_status && (
+        <>
+          <p className="text-xs text-[#71717a]">Esse lead ainda não foi analisado.</p>
+          <Button variant="default" size="sm" loading={analisando} onClick={onAnalisar} className="w-fit">
+            <Sparkles size={13} /> Analisar com IA
+          </Button>
+        </>
+      )}
+
+      {lead.analise_status === 'pendente' && (
+        <p className="text-xs text-[#f59e0b] flex items-center gap-1.5">
+          <span className="w-3 h-3 border-2 border-[#f59e0b] border-t-transparent rounded-full animate-spin shrink-0" />
+          Lendo site e redes sociais...
+        </p>
+      )}
+
+      {lead.analise_status === 'sem_site' && (
+        <p className="text-xs text-[#71717a]">Sem site cadastrado — não deu pra analisar automaticamente.</p>
+      )}
+
+      {lead.analise_status === 'erro' && (
+        <p className="text-xs text-[#ef4444]">{lead.analise_erro ?? 'Erro desconhecido na análise.'}</p>
+      )}
+
+      {lead.analise_status === 'concluida' && (
+        <div className="flex flex-col gap-2.5">
+          {lead.analise_resumo && (
+            <p className="text-sm text-[#d4d4d8] whitespace-pre-line">{lead.analise_resumo}</p>
+          )}
+          {lead.analise_mensagem && (
+            <div className="bg-[#111113] border border-[rgba(255,255,255,0.07)] rounded-[8px] p-2.5 flex items-start gap-2">
+              <p className="text-sm text-[#fafafa] flex-1 whitespace-pre-line">{lead.analise_mensagem}</p>
+              <button
+                onClick={copiarMensagem}
+                title={copiado ? 'Copiado!' : 'Copiar mensagem'}
+                className="shrink-0 p-1 rounded-[6px] text-[#71717a] hover:text-[#fafafa] hover:bg-[#27272a] transition-colors"
+              >
+                {copiado ? <Check size={14} className="text-[#22c55e]" /> : <Copy size={14} />}
+              </button>
+            </div>
+          )}
+        </div>
       )}
     </div>
   )

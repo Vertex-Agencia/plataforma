@@ -17,3 +17,19 @@ export async function salvarApifyToken(userId: string, apifyApiToken: string): P
     .upsert({ user_id: userId, apify_api_token: apifyApiToken }, { onConflict: 'user_id' })
   if (error) throw error
 }
+
+interface ConfigAgente {
+  openaiApiKey: string
+  modelo: string
+  prompt: string
+}
+
+export async function salvarConfigAgente(userId: string, config: ConfigAgente): Promise<void> {
+  const { error } = await supabase
+    .from('configuracoes')
+    .upsert(
+      { user_id: userId, openai_api_key: config.openaiApiKey, agente_modelo: config.modelo, agente_prompt: config.prompt },
+      { onConflict: 'user_id' }
+    )
+  if (error) throw error
+}
