@@ -1,12 +1,13 @@
 import { useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Download, Upload, CheckCircle, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Download, Upload, CheckCircle, RotateCcw, Pencil } from 'lucide-react'
 import {
   getClienteById,
   getParcelasByCliente,
   registrarPagamentoParcela,
   reverterParcelaPendente,
+  editarParcelaPendente,
   uploadContrato,
   getManutencaoByCliente,
 } from '../../services/clientes'
@@ -45,6 +46,11 @@ export function ClientePerfil() {
   const [valorDigitado, setValorDigitado] = useState('')
   const [dataPagamentoDigitada, setDataPagamentoDigitada] = useState('')
   const [revertendoId, setRevertendoId] = useState<number | null>(null)
+
+  // Editar uma parcela ainda pendente (valor e/ou vencimento) sem marcá-la como paga.
+  const [editandoParcela, setEditandoParcela] = useState<Parcela | null>(null)
+  const [valorEditado, setValorEditado] = useState('')
+  const [vencimentoEditado, setVencimentoEditado] = useState('')
 
   // Preferência global de ocultar valores (compartilhada com Dashboard e Financeiro via
   // useValoresOcultosStore, alternada pelo olho na barra superior).
@@ -103,6 +109,30 @@ export function ClientePerfil() {
       setRevertendoId(null)
     },
   })
+
+  const editarParcelaMutation = useMutation({
+    mutationFn: () => {
+      const valor = parseFloat(valorEditado.replace(',', '.'))
+      return editarParcelaPendente(editandoParcela!.id, valor, vencimentoEditado)
+    },
+    onSuccess: () => {
+      invalidar()
+      setEditandoParcela(null)
+      setValorEditado('')
+      setVencimentoEditado('')
+    },
+  })
+
+  function abrirModalEdicao(parcela: Parcela) {
+    setEditandoParcela(parcela)
+    setValorEditado(Number(parcela.valor_parcela).toFixed(2).replace('.', ','))
+    setVencimentoEditado(parcela.data_vencimento.split('T')[0])
+  }
+
+  function valorEditadoValido() {
+    const v = parseFloat(valorEditado.replace(',', '.'))
+    return !isNaN(v) && v > 0 && !!vencimentoEditado
+  }
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) => uploadContrato(clienteId, user!.id, file),
@@ -215,13 +245,22 @@ export function ClientePerfil() {
                 </div>
                 <Badge variant={parcelaVariant[p.status]}>{p.status}</Badge>
                 {p.status === 'pendente' ? (
-                  <Button
-                    size="sm"
-                    variant="accent"
-                    onClick={() => abrirModalPagamento(p)}
-                  >
-                    <CheckCircle size={14} /> Pago
-                  </Button>
+                  <>
+                    <button
+                      title="Editar valor/vencimento"
+                      onClick={() => abrirModalEdicao(p)}
+                      className="p-1.5 rounded-[6px] text-[#52525b] hover:text-[#a1a1aa] hover:bg-[#27272a] transition-colors"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <Button
+                      size="sm"
+                      variant="accent"
+                      onClick={() => abrirModalPagamento(p)}
+                    >
+                      <CheckCircle size={14} /> Pago
+                    </Button>
+                  </>
                 ) : (
                   <button
                     title="Reverter para pendente"
@@ -361,6 +400,47 @@ export function ClientePerfil() {
         <p className="text-sm text-[#a1a1aa]">
           Tem certeza que deseja marcar esta parcela como <span className="text-[#fafafa] font-medium">pendente</span> novamente? O valor da parcela será mantido.
         </p>
+      </Modal>
+
+      {/* Modal: editar parcela pendente (sem marcar como paga) */}
+      <Modal
+        open={!!editandoParcela}
+        onClose={() => { setEditandoParcela(null); setValorEditado(''); setVencimentoEditado('') }}
+        title={`Parcela ${editandoParcela?.numero_parcela} — Editar`}
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => { setEditandoParcela(null); setValorEditado(''); setVencimentoEditado('') }}>Cancelar</Button>
+            <Button
+              variant="accent"
+              loading={editarParcelaMutation.isPending}
+              onClick={() => editarParcelaMutation.mutate()}
+              disabled={!valorEditadoValido()}
+            >
+              Salvar
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Valor (R$)"
+              value={valorEditado}
+              onChange={(e) => setValorEditado(e.target.value)}
+              placeholder="0,00"
+              autoFocus
+            />
+            <Input
+              label="Vencimento"
+              type="date"
+              value={vencimentoEditado}
+              onChange={(e) => setVencimentoEditado(e.target.value)}
+            />
+          </div>
+          <p className="text-xs text-[#71717a]">
+            A parcela continua pendente — isso só ajusta o valor e/ou a data de vencimento previstos, sem afetar as demais parcelas.
+          </p>
+        </div>
       </Modal>
     </div>
   )
