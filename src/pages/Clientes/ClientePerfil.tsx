@@ -43,6 +43,7 @@ export function ClientePerfil() {
 
   const [pagandoParcela, setPagandoParcela] = useState<Parcela | null>(null)
   const [valorDigitado, setValorDigitado] = useState('')
+  const [dataPagamentoDigitada, setDataPagamentoDigitada] = useState('')
   const [revertendoId, setRevertendoId] = useState<number | null>(null)
 
   // Preferência global de ocultar valores (compartilhada com Dashboard e Financeiro via
@@ -83,13 +84,15 @@ export function ClientePerfil() {
         pagandoParcela!.id,
         valor,
         parcelas ?? [],
-        Number(cliente!.valor_total_acordado)
+        Number(cliente!.valor_total_acordado),
+        dataPagamentoDigitada ? new Date(`${dataPagamentoDigitada}T12:00:00`).toISOString() : undefined
       )
     },
     onSuccess: () => {
       invalidar()
       setPagandoParcela(null)
       setValorDigitado('')
+      setDataPagamentoDigitada('')
     },
   })
 
@@ -109,6 +112,7 @@ export function ClientePerfil() {
   function abrirModalPagamento(parcela: Parcela) {
     setPagandoParcela(parcela)
     setValorDigitado(Number(parcela.valor_parcela).toFixed(2).replace('.', ','))
+    setDataPagamentoDigitada(parcela.data_pagamento ? parcela.data_pagamento.split('T')[0] : new Date().toISOString().split('T')[0])
   }
 
   function valorValido() {
@@ -283,11 +287,11 @@ export function ClientePerfil() {
       {/* Modal: registrar pagamento */}
       <Modal
         open={!!pagandoParcela}
-        onClose={() => { setPagandoParcela(null); setValorDigitado('') }}
+        onClose={() => { setPagandoParcela(null); setValorDigitado(''); setDataPagamentoDigitada('') }}
         title={`Parcela ${pagandoParcela?.numero_parcela} — Registrar pagamento`}
         actions={
           <>
-            <Button variant="ghost" onClick={() => { setPagandoParcela(null); setValorDigitado('') }}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => { setPagandoParcela(null); setValorDigitado(''); setDataPagamentoDigitada('') }}>Cancelar</Button>
             <Button
               variant="accent"
               loading={pagarMutation.isPending}
@@ -304,13 +308,21 @@ export function ClientePerfil() {
             <span className="text-[#a1a1aa]">Valor da parcela</span>
             <span className="text-[#fafafa] font-medium">{formatCurrency(valorOriginal)}</span>
           </div>
-          <Input
-            label="Valor recebido (R$)"
-            value={valorDigitado}
-            onChange={(e) => setValorDigitado(e.target.value)}
-            placeholder="0,00"
-            autoFocus
-          />
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Valor recebido (R$)"
+              value={valorDigitado}
+              onChange={(e) => setValorDigitado(e.target.value)}
+              placeholder="0,00"
+              autoFocus
+            />
+            <Input
+              label="Data do pagamento"
+              type="date"
+              value={dataPagamentoDigitada}
+              onChange={(e) => setDataPagamentoDigitada(e.target.value)}
+            />
+          </div>
           {temDiferenca && pendentesRestantes > 0 && (
             <div className="rounded-[8px] bg-[#f59e0b1a] border border-[#f59e0b33] px-3 py-2.5">
               <p className="text-xs text-[#f59e0b]">
