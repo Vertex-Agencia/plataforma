@@ -2,13 +2,24 @@ import { getInitials, avatarColor } from '../../utils/format'
 
 interface AvatarProps {
   name: string
+  imageUrl?: string | null
   size?: 'sm' | 'md' | 'lg'
   className?: string
 }
 
 const sizes = { sm: 'w-7 h-7 text-xs', md: 'w-9 h-9 text-sm', lg: 'w-11 h-11 text-base' }
 
-export function Avatar({ name, size = 'md', className = '' }: AvatarProps) {
+export function Avatar({ name, imageUrl, size = 'md', className = '' }: AvatarProps) {
+  if (imageUrl) {
+    return (
+      <img
+        src={imageUrl}
+        alt={name}
+        className={`rounded-full object-cover shrink-0 ${sizes[size]} ${className}`}
+      />
+    )
+  }
+
   const color = avatarColor(name)
   const initials = getInitials(name)
   return (

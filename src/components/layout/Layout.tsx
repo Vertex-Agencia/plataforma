@@ -5,7 +5,14 @@ import { Topbar } from './Topbar'
 import { ErrorBoundary } from '../ErrorBoundary'
 
 function getSavedCollapsed(): boolean {
-  try { return localStorage.getItem('sidebar-collapsed') === 'true' } catch { return false }
+  try {
+    const saved = localStorage.getItem('sidebar-collapsed')
+    // Padrão: sidebar compacta, expande ao passar o mouse. Só fica sempre aberta se o
+    // usuário fixar isso explicitamente (botão "Fixar aberto").
+    return saved === null ? true : saved === 'true'
+  } catch {
+    return true
+  }
 }
 
 export function Layout() {
@@ -15,7 +22,7 @@ export function Layout() {
   function toggle() {
     setCollapsed((prev) => {
       const next = !prev
-      try { localStorage.setItem('sidebar-collapsed', String(next)) } catch {}
+      try { localStorage.setItem('sidebar-collapsed', String(next)) } catch { /* ignora falha de storage */ }
       return next
     })
   }

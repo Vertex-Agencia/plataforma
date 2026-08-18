@@ -19,7 +19,12 @@ export function Configuracoes() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [avatarUploadError, setAvatarUploadError] = useState<string | null>(null)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+
   const logoUrl: string | null = user?.user_metadata?.logo_url ?? null
+  const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
   const email = user?.email ?? ''
   const name = user?.user_metadata?.name ?? email.split('@')[0]
 
@@ -146,17 +151,99 @@ export function Configuracoes() {
     await supabase.auth.updateUser({ data: { logo_url: null } })
   }
 
+  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setAvatarUploadError('Formato não suportado. Use PNG, JPG, SVG ou WEBP.')
+      return
+    }
+    if (file.size > MAX_LOGO_SIZE) {
+      setAvatarUploadError('Arquivo muito grande. Máximo 2MB.')
+      return
+    }
+
+    setAvatarUploading(true)
+    setAvatarUploadError(null)
+
+    const ext = file.name.split('.').pop()
+    const path = `${user!.id}/avatar.${ext}`
+
+    const { error: storageError } = await supabase.storage
+      .from('logos')
+      .upload(path, file, { upsert: true, cacheControl: '3600' })
+
+    if (storageError) {
+      setAvatarUploadError('Erro ao fazer upload: ' + storageError.message)
+      setAvatarUploading(false)
+      return
+    }
+
+    const { data: urlData } = supabase.storage.from('logos').getPublicUrl(path)
+
+    const { error: updateError } = await supabase.auth.updateUser({
+      data: { avatar_url: urlData.publicUrl },
+    })
+
+    if (updateError) {
+      setAvatarUploadError('Erro ao salvar foto: ' + updateError.message)
+    }
+
+    setAvatarUploading(false)
+  }
+
+  async function handleAvatarRemove() {
+    setAvatarUploadError(null)
+    await supabase.auth.updateUser({ data: { avatar_url: null } })
+  }
+
   return (
     <div className="max-w-2xl flex flex-col gap-5">
       <Card className="p-5">
         <p className="text-sm font-semibold text-[#fafafa] mb-4">Perfil</p>
         <div className="flex items-center gap-4">
-          <Avatar name={name} size="lg" />
+          <div className="relative shrink-0 group">
+            <Avatar name={name} imageUrl={avatarUrl} size="lg" />
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/svg+xml,image/webp"
+              className="hidden"
+              onChange={handleAvatarUpload}
+            />
+            <button
+              onClick={() => avatarInputRef.current?.click()}
+              title="Alterar foto de perfil"
+              className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#22c55e] text-[#09090b] flex items-center justify-center border-2 border-[#111113] hover:bg-[#16a34a] transition-colors disabled:opacity-60"
+              disabled={avatarUploading}
+            >
+              <Upload size={10} />
+            </button>
+          </div>
           <div>
             <p className="font-medium text-[#fafafa]">{name}</p>
             <p className="text-sm text-[#a1a1aa]">{email}</p>
+            <div className="mt-1.5 flex items-center gap-3">
+              <button
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={avatarUploading}
+                className="text-xs text-[#22c55e] hover:underline disabled:opacity-60"
+              >
+                {avatarUploading ? 'Enviando...' : avatarUrl ? 'Alterar foto' : 'Adicionar foto'}
+              </button>
+              {avatarUrl && (
+                <button onClick={handleAvatarRemove} className="text-xs text-[#71717a] hover:text-[#ef4444] transition-colors">
+                  Remover
+                </button>
+              )}
+            </div>
           </div>
         </div>
+        {avatarUploadError && (
+          <p className="text-xs text-[#ef4444] mt-3">{avatarUploadError}</p>
+        )}
         <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,0.07)] grid grid-cols-2 gap-3 text-sm">
           <div>
             <p className="text-[#a1a1aa]">Email</p>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
   Users,
@@ -11,8 +11,8 @@ import {
   CalendarClock,
   BookOpen,
   Settings,
-  ChevronLeft,
-  ChevronRight,
+  Pin,
+  PinOff,
   ChevronDown,
   ChevronUp,
   LogOut,
@@ -81,16 +81,22 @@ interface SidebarProps {
   onCloseMobile: () => void
 }
 
-const navLinkClass = (collapsed: boolean, isActive: boolean) =>
+const navLinkClass = (expanded: boolean, isActive: boolean) =>
   `relative flex items-center gap-3 px-2.5 py-2 rounded-[8px] text-sm transition-colors ${
-    collapsed ? 'justify-center' : ''
+    expanded ? '' : 'justify-center'
   } ${isActive ? 'bg-[#22c55e]/10 text-[#22c55e]' : 'text-[#a1a1aa] hover:text-[#fafafa] hover:bg-[#18181b]'}`
 
 export function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile }: SidebarProps) {
   const { user } = useAuthStore()
-  const navigate = useNavigate()
   const { pathname } = useLocation()
   const logoUrl: string | null = user?.user_metadata?.logo_url ?? null
+  const avatarUrl: string | null = user?.user_metadata?.avatar_url ?? null
+
+  // No modo "recolhido" (pino solto), passar o mouse expande a sidebar por cima do
+  // conteúdo sem empurrá-lo (a largura reservada no Layout continua sendo a mínima).
+  // Se o usuário fixar a sidebar aberta (collapsed = false), o hover não faz diferença.
+  const [hovering, setHovering] = useState(false)
+  const expanded = !collapsed || hovering
 
   const [openGroups, setOpenGroups] = useState<Set<string>>(
     () => new Set(navItems.filter((i) => i.children?.some((c) => c.to === pathname)).map((i) => i.to))
@@ -134,20 +140,22 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile }: Side
       )}
 
       <aside
-        className={`fixed top-0 left-0 h-screen bg-[#111113] border-r border-[rgba(255,255,255,0.07)] flex flex-col z-40 transition-all duration-300 ${
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
+        className={`fixed top-0 left-0 h-screen bg-[#111113] border-r border-[rgba(255,255,255,0.07)] flex flex-col z-40 transition-all duration-200 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        }`}
-        style={{ width: collapsed ? '56px' : '224px' }}
+        } ${collapsed && hovering ? 'shadow-2xl shadow-black/60' : ''}`}
+        style={{ width: expanded ? '224px' : '56px' }}
       >
         {/* Logo */}
-        <div className={`border-b border-[rgba(255,255,255,0.07)] flex items-center min-h-[56px] ${collapsed ? 'justify-center px-1' : 'px-3 gap-2.5'}`}>
+        <div className={`border-b border-[rgba(255,255,255,0.07)] flex items-center min-h-[56px] ${expanded ? 'px-3 gap-2.5' : 'justify-center px-1'}`}>
           <img
-            src={collapsed ? (logoUrl ?? '/vertex-mark.png') : (logoUrl ?? '/vertex-logo.png')}
+            src={expanded ? (logoUrl ?? '/vertex-logo.png') : (logoUrl ?? '/vertex-mark.png')}
             alt="Vertex"
-            className={`object-contain shrink-0 ${collapsed ? 'h-8 w-8' : 'h-8 w-auto max-w-[130px]'}`}
+            className={`object-contain shrink-0 ${expanded ? 'h-8 w-auto max-w-[130px]' : 'h-8 w-8'}`}
           />
 
-          {!collapsed && (
+          {expanded && (
             <div className="ml-auto flex items-center gap-1.5 bg-[#22c55e]/10 border border-[#22c55e]/20 rounded-full px-2 py-0.5 shrink-0">
               <span className="relative flex h-1.5 w-1.5 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#22c55e] opacity-75" />
@@ -170,7 +178,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile }: Side
         <nav className="flex-1 px-2 py-3 flex flex-col gap-3 overflow-y-auto overflow-x-hidden">
           {navSections.map((section) => (
             <div key={section.label} className="flex flex-col gap-0.5">
-              {!collapsed && (
+              {expanded && (
                 <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[#52525b]">
                   {section.label}
                 </p>
@@ -179,7 +187,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile }: Side
                 <NavEntry
                   key={item.to}
                   item={item}
-                  collapsed={collapsed}
+                  expanded={expanded}
                   isOpen={openGroups.has(item.to)}
                   onToggleGroup={toggleGroup}
                 />
@@ -188,19 +196,26 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile }: Side
           ))}
         </nav>
 
+        {/* Configurações — fixo, sempre visível */}
+        <div className="px-2 pt-2 border-t border-[rgba(255,255,255,0.07)]">
+          <NavLink to="/configuracoes" title={expanded ? undefined : 'Configurações'} className={({ isActive }) => navLinkClass(expanded, isActive)}>
+            {({ isActive }) => (
+              <>
+                {isActive && <span className="absolute left-[-8px] top-1/2 -translate-y-1/2 h-4 w-[2px] bg-[#22c55e] rounded-full" />}
+                <Settings size={16} className="shrink-0" />
+                {expanded && <span className="whitespace-nowrap">Configurações</span>}
+              </>
+            )}
+          </NavLink>
+        </div>
+
         {/* Conta */}
-        <div ref={accountRef} className="relative px-2 pt-2 border-t border-[rgba(255,255,255,0.07)]">
+        <div ref={accountRef} className="relative px-2 pt-2 pb-2 border-t border-[rgba(255,255,255,0.07)]">
           {accountOpen && (
             <div className="absolute bottom-full left-2 right-2 mb-1.5 bg-[#18181b] border border-[rgba(255,255,255,0.1)] rounded-[10px] shadow-lg overflow-hidden">
               <div className="px-3 py-2.5 border-b border-[rgba(255,255,255,0.07)]">
                 <p className="text-xs text-[#a1a1aa] truncate">{user?.email}</p>
               </div>
-              <button
-                onClick={() => { setAccountOpen(false); navigate('/configuracoes') }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm text-[#a1a1aa] hover:text-[#fafafa] hover:bg-[#27272a] transition-colors"
-              >
-                <Settings size={14} /> Configurações
-              </button>
               <button
                 onClick={handleSignOut}
                 className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm text-[#ef4444] hover:bg-[#ef4444]/10 transition-colors"
@@ -213,11 +228,11 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile }: Side
           <button
             onClick={() => setAccountOpen((v) => !v)}
             className={`w-full flex items-center gap-2.5 py-2 rounded-[8px] text-sm text-[#a1a1aa] hover:text-[#fafafa] hover:bg-[#18181b] transition-colors ${
-              collapsed ? 'justify-center px-0' : 'px-1.5'
+              expanded ? 'px-1.5' : 'justify-center px-0'
             }`}
           >
-            <Avatar name={user?.email ?? 'U'} size="sm" />
-            {!collapsed && (
+            <Avatar name={user?.email ?? 'U'} imageUrl={avatarUrl} size="sm" />
+            {expanded && (
               <>
                 <span className="flex-1 min-w-0 truncate text-left">{user?.email}</span>
                 <ChevronUp size={14} className={`shrink-0 transition-transform ${accountOpen ? '' : 'rotate-180'}`} />
@@ -226,15 +241,15 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile }: Side
           </button>
         </div>
 
-        {/* Recolher */}
-        <div className="px-2 pb-3 pt-1 hidden lg:block">
+        {/* Fixar / soltar */}
+        <div className="px-2 pb-3 hidden lg:block">
           <button
             onClick={onToggle}
-            title={collapsed ? 'Expandir menu' : 'Recolher menu'}
-            className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-[8px] text-sm text-[#52525b] hover:text-[#a1a1aa] hover:bg-[#18181b] transition-colors ${collapsed ? 'justify-center' : ''}`}
+            title={collapsed ? 'Fixar menu aberto' : 'Deixar em modo compacto'}
+            className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-[8px] text-sm text-[#52525b] hover:text-[#a1a1aa] hover:bg-[#18181b] transition-colors ${expanded ? '' : 'justify-center'}`}
           >
-            {collapsed ? <ChevronRight size={16} className="shrink-0" /> : <ChevronLeft size={16} className="shrink-0" />}
-            {!collapsed && <span className="whitespace-nowrap">Recolher</span>}
+            {collapsed ? <Pin size={16} className="shrink-0" /> : <PinOff size={16} className="shrink-0" />}
+            {expanded && <span className="whitespace-nowrap">{collapsed ? 'Fixar aberto' : 'Modo compacto'}</span>}
           </button>
         </div>
       </aside>
@@ -244,30 +259,30 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile }: Side
 
 interface NavEntryProps {
   item: NavItem
-  collapsed: boolean
+  expanded: boolean
   isOpen: boolean
   onToggleGroup: (to: string) => void
 }
 
-function NavEntry({ item, collapsed, isOpen, onToggleGroup }: NavEntryProps) {
+function NavEntry({ item, expanded, isOpen, onToggleGroup }: NavEntryProps) {
   const { pathname } = useLocation()
   const Icon = item.icon
   const hasChildren = !!item.children?.length
 
   // Sem espaço pra acordeão no modo minificado — o item pai vira link direto.
-  if (!hasChildren || collapsed) {
+  if (!hasChildren || !expanded) {
     return (
       <NavLink
         to={item.to}
         end={item.to === '/'}
-        title={collapsed ? item.label : undefined}
-        className={({ isActive }) => navLinkClass(collapsed, isActive)}
+        title={expanded ? undefined : item.label}
+        className={({ isActive }) => navLinkClass(expanded, isActive)}
       >
         {({ isActive }) => (
           <>
             {isActive && <span className="absolute left-[-8px] top-1/2 -translate-y-1/2 h-4 w-[2px] bg-[#22c55e] rounded-full" />}
             <Icon size={16} className="shrink-0" />
-            {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
+            {expanded && <span className="whitespace-nowrap">{item.label}</span>}
           </>
         )}
       </NavLink>
