@@ -55,6 +55,8 @@ export function Leads() {
   const [pipelineErro, setPipelineErro] = useState<string | null>(null)
   const [leadSelecionado, setLeadSelecionado] = useState<Lead | null>(null)
   const [observacaoRascunho, setObservacaoRascunho] = useState('')
+  const [siteRascunho, setSiteRascunho] = useState('')
+  const [instagramRascunho, setInstagramRascunho] = useState('')
 
   const [analiseModalOpen, setAnaliseModalOpen] = useState(false)
   const [analiseModo, setAnaliseModo] = useState<'lead' | 'etapa'>('lead')
@@ -145,6 +147,14 @@ export function Leads() {
 
   const salvarObservacaoMutation = useMutation({
     mutationFn: ({ id, observacoes }: { id: number; observacoes: string }) => updateLead(id, { observacoes }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leads', user?.id] }),
+  })
+
+  // Site e Instagram do lead às vezes não vêm da busca automática (Google Maps não tem esse
+  // dado) — deixamos os dois editáveis manualmente pra completar depois.
+  const salvarContatoMutation = useMutation({
+    mutationFn: ({ id, site, instagram_url }: { id: number; site: string | null; instagram_url: string | null }) =>
+      updateLead(id, { site, instagram_url }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leads', user?.id] }),
   })
 
@@ -253,7 +263,12 @@ export function Leads() {
                       lead={lead}
                       onDragStart={() => { dragLeadId.current = lead.id }}
                       onDelete={() => deleteLeadMutation.mutate(lead.id)}
-                      onClick={() => { setObservacaoRascunho(lead.observacoes ?? ''); setLeadSelecionado(lead) }}
+                      onClick={() => {
+                        setObservacaoRascunho(lead.observacoes ?? '')
+                        setSiteRascunho(lead.site ?? '')
+                        setInstagramRascunho(lead.instagram_url ?? '')
+                        setLeadSelecionado(lead)
+                      }}
                       onAnalisar={() => analisarMutation.mutate(lead.id)}
                       analisando={analisarMutation.isPending && analisarMutation.variables === lead.id}
                     />
@@ -431,7 +446,8 @@ export function Leads() {
 
               <div className="grid sm:grid-cols-2 gap-3">
                 {leadAtual.telefone && <TelefoneAcoes telefone={leadAtual.telefone} />}
-                {leadAtual.site && (
+
+                {leadAtual.site ? (
                   <a
                     href={leadAtual.site.startsWith('http') ? leadAtual.site : `https://${leadAtual.site}`}
                     target="_blank"
@@ -440,7 +456,61 @@ export function Leads() {
                   >
                     <Globe size={14} className="shrink-0" /> <span className="truncate">{leadAtual.site}</span>
                   </a>
+                ) : (
+                  <div className="flex items-center gap-1.5 bg-[#18181b] rounded-[8px] px-2 py-1.5">
+                    <Globe size={14} className="text-[#52525b] shrink-0 ml-1" />
+                    <input
+                      value={siteRascunho}
+                      onChange={(e) => setSiteRascunho(e.target.value)}
+                      placeholder="Adicionar site..."
+                      className="flex-1 min-w-0 bg-transparent text-sm text-[#fafafa] placeholder:text-[#52525b] outline-none"
+                    />
+                    {siteRascunho.trim() && siteRascunho.trim() !== (leadAtual.site ?? '') && (
+                      <button
+                        onClick={() => salvarContatoMutation.mutate({ id: leadAtual.id, site: siteRascunho.trim(), instagram_url: leadAtual.instagram_url ?? null })}
+                        disabled={salvarContatoMutation.isPending}
+                        className="text-xs text-[#22c55e] hover:underline shrink-0 disabled:opacity-50"
+                      >
+                        Salvar
+                      </button>
+                    )}
+                  </div>
                 )}
+
+                {leadAtual.instagram_url ? (
+                  <a
+                    href={leadAtual.instagram_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 text-sm text-[#3b82f6] bg-[#18181b] rounded-[8px] px-3 py-2 truncate hover:underline"
+                  >
+                    <IconeInstagram size={14} className="shrink-0" /> <span className="truncate">{leadAtual.instagram_url}</span>
+                  </a>
+                ) : (
+                  <div className="flex items-center gap-1.5 bg-[#18181b] rounded-[8px] px-2 py-1.5 text-[#52525b]">
+                    <IconeInstagram size={14} className="shrink-0 ml-1" />
+                    <input
+                      value={instagramRascunho}
+                      onChange={(e) => setInstagramRascunho(e.target.value)}
+                      placeholder="Adicionar Instagram..."
+                      className="flex-1 min-w-0 bg-transparent text-sm text-[#fafafa] placeholder:text-[#52525b] outline-none"
+                    />
+                    {instagramRascunho.trim() && instagramRascunho.trim() !== (leadAtual.instagram_url ?? '') && (
+                      <button
+                        onClick={() => {
+                          const valor = instagramRascunho.trim()
+                          const url = valor.startsWith('http') ? valor : `https://instagram.com/${valor.replace(/^@/, '')}`
+                          salvarContatoMutation.mutate({ id: leadAtual.id, site: leadAtual.site ?? null, instagram_url: url })
+                        }}
+                        disabled={salvarContatoMutation.isPending}
+                        className="text-xs text-[#22c55e] hover:underline shrink-0 disabled:opacity-50"
+                      >
+                        Salvar
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {leadAtual.endereco && (
                   <div className="flex items-center gap-2 text-sm text-[#fafafa] bg-[#18181b] rounded-[8px] px-3 py-2 sm:col-span-2">
                     <MapPin size={14} className="text-[#71717a] shrink-0" /> {leadAtual.endereco}
@@ -636,9 +706,9 @@ function LeadCard({ lead, onDragStart, onDelete, onClick, onAnalisar, analisando
 // Ícones de Instagram/Facebook inline: a versão do lucide-react instalada não traz
 // ícones de marca (removidos do pacote deles), então desenhamos os glifos direto.
 
-function IconeInstagram({ size = 12 }: { size?: number }) {
+function IconeInstagram({ size = 12, className }: { size?: number; className?: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
       <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
       <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
