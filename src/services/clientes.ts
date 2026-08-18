@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase'
-import type { Cliente, Parcela, ManutencaoRecorrente, OrigemParcela } from '../types/database'
+import type { Cliente, Parcela, ManutencaoRecorrente, OrigemParcela, StatusParcela } from '../types/database'
 
 export async function getClientes(userId: string): Promise<Cliente[]> {
   const { data, error } = await supabase
@@ -120,47 +120,6 @@ export async function reverterParcelaPendente(parcelaId: number) {
   if (error) throw error
 }
 
-// Ajusta valor e/ou vencimento de uma parcela que ainda não foi paga — sem mexer em status.
-// Se recalcularDemais vier true, redistribui o saldo restante (valor total acordado menos o já
-// pago menos o novo valor desta parcela) entre as demais parcelas pendentes do cliente.
-export async function editarParcelaPendente(
-  parcelaId: number,
-  valorParcela: number,
-  dataVencimento: string,
-  recalcularDemais?: boolean,
-  todasParcelas?: Parcela[],
-  valorTotalAcordado?: number
-) {
-  const { error } = await supabase
-    .from('parcelas')
-    .update({ valor_parcela: valorParcela, data_vencimento: dataVencimento })
-    .eq('id', parcelaId)
-  if (error) throw error
-
-  if (!recalcularDemais || !todasParcelas || valorTotalAcordado == null) return
-
-  const totalPago = todasParcelas
-    .filter((p) => p.status === 'pago')
-    .reduce((s, p) => s + Number(p.valor_parcela), 0)
-
-  const saldoRestante = valorTotalAcordado - totalPago - valorParcela
-  const outrasPendentes = todasParcelas.filter((p) => p.status === 'pendente' && p.id !== parcelaId)
-
-  if (outrasPendentes.length === 0 || saldoRestante <= 0) return
-
-  const base = Math.floor((saldoRestante / outrasPendentes.length) * 100) / 100
-  const ajuste = Math.round((saldoRestante - base * outrasPendentes.length) * 100) / 100
-
-  await Promise.all(
-    outrasPendentes.map((p, i) =>
-      supabase
-        .from('parcelas')
-        .update({ valor_parcela: i === 0 ? base + ajuste : base })
-        .eq('id', p.id)
-    )
-  )
-}
-
 export async function registrarPagamentoParcela(
   parcelaId: number,
   valorPago: number,
@@ -197,107 +156,63 @@ export async function registrarPagamentoParcela(
   )
 }
 
-// Edita o valor total acordado do contrato. Se recalcularPendentes vier true, redistribui
-// (valorTotalAcordado - já pago) igualmente entre as parcelas ainda pendentes.
-export async function atualizarValorTotalAcordado(
+export interface LinhaParcela {
+  /** null = parcela nova (ainda não existe no banco) */
+  id: number | null
+  valor_parcela: number
+  data_vencimento: string
+  status: StatusParcela
+  data_pagamento: string | null
+}
+
+// Salva o parcelamento inteiro de uma vez: atualiza valor/vencimento/status de cada parcela
+// (paga ou pendente — edição total, inclusive corrigir uma já paga), insere as novas, remove as
+// que o usuário tirou da lista (só permite excluir pendente, nunca uma já paga) e renumera tudo
+// sequencialmente. O valor_total_acordado do cliente passa a ser sempre a soma das parcelas —
+// única fonte de verdade, sem "redistribuição" separada pra confundir.
+export async function salvarParcelamento(
   clienteId: number,
-  novoValor: number,
-  recalcularPendentes?: boolean,
-  todasParcelas?: Parcela[]
+  userId: string,
+  origem: OrigemParcela,
+  idsOriginais: number[],
+  linhas: LinhaParcela[]
 ) {
-  const { error } = await supabase.from('clientes').update({ valor_total_acordado: novoValor }).eq('id', clienteId)
+  const idsRestantes = new Set(linhas.filter((l) => l.id != null).map((l) => l.id))
+  const idsRemover = idsOriginais.filter((id) => !idsRestantes.has(id))
+
+  if (idsRemover.length > 0) {
+    const { error } = await supabase.from('parcelas').delete().in('id', idsRemover).eq('status', 'pendente')
+    if (error) throw error
+  }
+
+  const totalFinal = linhas.length
+
+  await Promise.all(
+    linhas.map((l, i) => {
+      const payload = {
+        valor_parcela: l.valor_parcela,
+        data_vencimento: l.data_vencimento,
+        status: l.status,
+        data_pagamento: l.status === 'pago' ? l.data_pagamento : null,
+        numero_parcela: i + 1,
+        total_parcelas: totalFinal,
+      }
+      if (l.id != null) {
+        return supabase.from('parcelas').update(payload).eq('id', l.id)
+      }
+      return supabase.from('parcelas').insert({
+        ...payload,
+        user_id: userId,
+        cliente_id: clienteId,
+        manutencao_recorrente_id: null,
+        origem,
+      })
+    })
+  )
+
+  const novoValorTotal = linhas.reduce((s, l) => s + Number(l.valor_parcela), 0)
+  const { error } = await supabase.from('clientes').update({ valor_total_acordado: novoValorTotal }).eq('id', clienteId)
   if (error) throw error
-
-  if (!recalcularPendentes || !todasParcelas) return
-
-  const totalPago = todasParcelas.filter((p) => p.status === 'pago').reduce((s, p) => s + Number(p.valor_parcela), 0)
-  const pendentes = todasParcelas.filter((p) => p.status === 'pendente')
-  const saldoRestante = novoValor - totalPago
-
-  if (pendentes.length === 0 || saldoRestante <= 0) return
-
-  const base = Math.floor((saldoRestante / pendentes.length) * 100) / 100
-  const ajuste = Math.round((saldoRestante - base * pendentes.length) * 100) / 100
-
-  await Promise.all(
-    pendentes.map((p, i) =>
-      supabase
-        .from('parcelas')
-        .update({ valor_parcela: i === 0 ? base + ajuste : base })
-        .eq('id', p.id)
-    )
-  )
-}
-
-interface NovaParcelaInput {
-  clienteId: number
-  userId: string
-  origem: OrigemParcela
-  valor: number
-  dataVencimento: string
-  jaPaga: boolean
-  dataPagamento?: string
-}
-
-// Adiciona uma parcela extra fora do parcelamento original — serve tanto pra estender o
-// contrato (nova parcela pendente) quanto pra registrar um pagamento avulso (já paga, com data).
-export async function adicionarParcelaManual(input: NovaParcelaInput) {
-  const { data: existentes, error: fetchError } = await supabase
-    .from('parcelas')
-    .select('numero_parcela')
-    .eq('cliente_id', input.clienteId)
-  if (fetchError) throw fetchError
-
-  const quantidadeAtual = existentes?.length ?? 0
-  const proximoNumero = quantidadeAtual > 0 ? Math.max(...existentes!.map((p) => p.numero_parcela)) + 1 : 1
-  const novoTotal = quantidadeAtual + 1
-
-  const { error: insertError } = await supabase.from('parcelas').insert({
-    user_id: input.userId,
-    cliente_id: input.clienteId,
-    manutencao_recorrente_id: null,
-    origem: input.origem,
-    numero_parcela: proximoNumero,
-    total_parcelas: novoTotal,
-    valor_parcela: input.valor,
-    data_vencimento: input.dataVencimento,
-    status: input.jaPaga ? 'pago' : 'pendente',
-    data_pagamento: input.jaPaga ? (input.dataPagamento ?? new Date().toISOString()) : null,
-  })
-  if (insertError) throw insertError
-
-  const { error: updateError } = await supabase
-    .from('parcelas')
-    .update({ total_parcelas: novoTotal })
-    .eq('cliente_id', input.clienteId)
-  if (updateError) throw updateError
-}
-
-// Remove uma parcela pendente (nunca uma já paga, pra não perder histórico) e renumera as
-// restantes sequencialmente, ajustando o total_parcelas de todo mundo.
-export async function removerParcelaPendente(parcelaId: number, clienteId: number) {
-  const { error: deleteError } = await supabase
-    .from('parcelas')
-    .delete()
-    .eq('id', parcelaId)
-    .eq('status', 'pendente')
-  if (deleteError) throw deleteError
-
-  const { data: restantes, error: fetchError } = await supabase
-    .from('parcelas')
-    .select('id')
-    .eq('cliente_id', clienteId)
-    .order('numero_parcela', { ascending: true })
-  if (fetchError) throw fetchError
-
-  const novoTotal = restantes?.length ?? 0
-  if (novoTotal === 0) return
-
-  await Promise.all(
-    (restantes ?? []).map((p, i) =>
-      supabase.from('parcelas').update({ numero_parcela: i + 1, total_parcelas: novoTotal }).eq('id', p.id)
-    )
-  )
 }
 
 export async function deleteClientes(ids: number[]) {
